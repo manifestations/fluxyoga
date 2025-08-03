@@ -34,6 +34,7 @@ import { AppSettings, DEFAULT_SETTINGS } from '../../types/settings';
 import { VRAMOptimizations } from '../../services/GPUDetection';
 import { trainingCommandBuilder } from '../../services/TrainingCommandBuilder';
 import { trainingExecutor } from '../../services/TrainingExecutor';
+import PromptManager from '../prompts/PromptManager';
 
 interface SimpleTrainingFormProps {
   onTrainingStart?: (process: any) => void;
@@ -488,17 +489,10 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
             </Grid>
 
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={4}
-                label="Sample Prompts (one per line)"
-                value={config.samplePrompts.join('\n')}
-                onChange={(e) => setConfig(prev => ({ 
-                  ...prev, 
-                  samplePrompts: e.target.value.split('\n').filter(p => p.trim()) 
-                }))}
-                placeholder="Enter prompts for sample generation..."
+              <PromptManager
+                value={config.samplePrompts}
+                onChange={(prompts) => setConfig(prev => ({ ...prev, samplePrompts: prompts }))}
+                label="Sample Generation Prompts"
                 helperText={`Samples will be generated every ${calculateSampleSteps()} steps`}
               />
             </Grid>

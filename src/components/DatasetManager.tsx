@@ -80,27 +80,82 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-const DatasetManager = () => {
-  const [tabValue, setTabValue] = useState(0);
-  const [datasetPath, setDatasetPath] = useState('');
-  const [datasets, setDatasets] = useState<string[]>([]);
-  const [bucketResolution, setBucketResolution] = useState(512);
-  const [bucketSizeLimit, setBucketSizeLimit] = useState(1024);
+interface DatasetState {
+  tabValue: number;
+  datasetPath: string;
+  datasets: string[];
+  bucketResolution: number;
+  bucketSizeLimit: number;
+  sourceFolder: string;
+  outputFolder: string;
+  targetSize: number;
+  resizeMode: 'keep_ratio' | 'fill' | 'crop';
+  jpegQuality: number;
+  convertFormat: string;
+  processing: boolean;
+  captionSourceFolder: string;
+  captionModel: 'gpt-4-vision' | 'blip' | 'blip2' | 'vit-gpt2' | 'florence-2';
+  captionTemplate: string;
+  overwriteCaptions: boolean;
+  captionGenerating: boolean;
+  processedFiles: string[];
+  captionProgress: number;
+  currentFile: string;
+  totalFiles: number;
+  loadedImages: ImageWithCaption[];
+  loadingImages: boolean;
+  datasetName: string;
+  datasetDescription: string;
+  triggerWord: string;
+}
+
+interface DatasetManagerProps {
+  datasetState?: DatasetState;
+  onDatasetStateChange?: (state: DatasetState) => void;
+}
+
+const DatasetManager: React.FC<DatasetManagerProps> = () => {
+  // Load state from localStorage on component mount
+  const loadStateFromStorage = (): Partial<DatasetState> => {
+    try {
+      const saved = localStorage.getItem('datasetManagerState');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  // Save state to localStorage
+  const saveStateToStorage = (state: Partial<DatasetState>) => {
+    try {
+      const current = loadStateFromStorage();
+      const updated = { ...current, ...state };
+      localStorage.setItem('datasetManagerState', JSON.stringify(updated));
+    } catch (error) {
+      console.error('Error saving state:', error);
+    }
+  };
+
+  const [tabValue, setTabValue] = useState(() => loadStateFromStorage().tabValue || 0);
+  const [datasetPath, setDatasetPath] = useState(() => loadStateFromStorage().datasetPath || '');
+  const [datasets, setDatasets] = useState<string[]>(() => loadStateFromStorage().datasets || []);
+  const [bucketResolution, setBucketResolution] = useState(() => loadStateFromStorage().bucketResolution || 512);
+  const [bucketSizeLimit, setBucketSizeLimit] = useState(() => loadStateFromStorage().bucketSizeLimit || 1024);
   
   // Image preprocessing state
-  const [sourceFolder, setSourceFolder] = useState('');
-  const [outputFolder, setOutputFolder] = useState('');
-  const [targetSize, setTargetSize] = useState(512);
-  const [resizeMode, setResizeMode] = useState<'keep_ratio' | 'fill' | 'crop'>('crop');
-  const [jpegQuality, setJpegQuality] = useState(95);
-  const [convertFormat, setConvertFormat] = useState('jpg');
+  const [sourceFolder, setSourceFolder] = useState(() => loadStateFromStorage().sourceFolder || '');
+  const [outputFolder, setOutputFolder] = useState(() => loadStateFromStorage().outputFolder || '');
+  const [targetSize, setTargetSize] = useState(() => loadStateFromStorage().targetSize || 512);
+  const [resizeMode, setResizeMode] = useState<'keep_ratio' | 'fill' | 'crop'>(() => loadStateFromStorage().resizeMode || 'crop');
+  const [jpegQuality, setJpegQuality] = useState(() => loadStateFromStorage().jpegQuality || 95);
+  const [convertFormat, setConvertFormat] = useState(() => loadStateFromStorage().convertFormat || 'jpg');
   const [processing, setProcessing] = useState(false);
   
   // Caption generation state
-  const [captionSourceFolder, setCaptionSourceFolder] = useState('');
-  const [captionModel, setCaptionModel] = useState<'gpt-4-vision' | 'blip' | 'blip2' | 'vit-gpt2' | 'florence-2'>('florence-2');
-  const [captionTemplate, setCaptionTemplate] = useState('');
-  const [overwriteCaptions, setOverwriteCaptions] = useState(false);
+  const [captionSourceFolder, setCaptionSourceFolder] = useState(() => loadStateFromStorage().captionSourceFolder || '');
+  const [captionModel, setCaptionModel] = useState<'gpt-4-vision' | 'blip' | 'blip2' | 'vit-gpt2' | 'florence-2'>(() => loadStateFromStorage().captionModel || 'florence-2');
+  const [captionTemplate, setCaptionTemplate] = useState(() => loadStateFromStorage().captionTemplate || '');
+  const [overwriteCaptions, setOverwriteCaptions] = useState(() => loadStateFromStorage().overwriteCaptions || false);
   const [captionGenerating, setCaptionGenerating] = useState(false);
   const [processedFiles, setProcessedFiles] = useState<string[]>([]);
   const [captionProgress, setCaptionProgress] = useState(0);
@@ -112,9 +167,22 @@ const DatasetManager = () => {
   const [loadingImages, setLoadingImages] = useState(false);
   
   // Dataset configuration for LoRA training
-  const [datasetName, setDatasetName] = useState('');
-  const [datasetDescription, setDatasetDescription] = useState('');
-  const [triggerWord, setTriggerWord] = useState('');
+  const [datasetName, setDatasetName] = useState(() => loadStateFromStorage().datasetName || '');
+  const [datasetDescription, setDatasetDescription] = useState(() => loadStateFromStorage().datasetDescription || '');
+  const [triggerWord, setTriggerWord] = useState(() => loadStateFromStorage().triggerWord || '');
+
+  // Save state changes to localStorage
+  useEffect(() => {
+    saveStateToStorage({
+      tabValue, datasetPath, datasets, bucketResolution, bucketSizeLimit,
+      sourceFolder, outputFolder, targetSize, resizeMode, jpegQuality, convertFormat,
+      captionSourceFolder, captionModel, captionTemplate, overwriteCaptions,
+      datasetName, datasetDescription, triggerWord
+    });
+  }, [tabValue, datasetPath, datasets, bucketResolution, bucketSizeLimit,
+      sourceFolder, outputFolder, targetSize, resizeMode, jpegQuality, convertFormat,
+      captionSourceFolder, captionModel, captionTemplate, overwriteCaptions,
+      datasetName, datasetDescription, triggerWord]);
 
   // Listen for Python progress updates
   useEffect(() => {
