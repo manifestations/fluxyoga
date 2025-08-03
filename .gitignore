@@ -138,3 +138,9 @@ sd-scripts/
 
 #Sample images
 sample/
+
+# Documentation and planning
+FUTURE_ROADMAP.md
+*.roadmap.md
+planning/
+docs/drafts/

@@ -51,11 +51,39 @@
 
 ## 📋 Prerequisites
 
+### System Requirements
 - **Node.js** 18.0.0 or higher
-- **Python** 3.10+ with PyTorch and CUDA support
+- **Python** 3.10+ (3.10.6 recommended)
 - **Graphics Card** with 4GB+ VRAM (8GB+ recommended)
 - **Operating System**: Windows 10/11, macOS 10.14+, or Linux
 - **Git** for cloning the required sd-scripts repository
+- **Disk Space**: 10GB+ free space for models and outputs
+
+### GPU Requirements by Platform
+
+#### ✅ NVIDIA GPUs (Recommended - Best Support)
+**Windows/Linux/macOS** - CUDA 11.8+ or 12.1+
+- **Minimum**: GTX 1060 6GB, RTX 2060 (6GB VRAM)
+- **Recommended**: RTX 3070, RTX 4070 (8-12GB VRAM)
+- **Optimal**: RTX 3080, RTX 4080, RTX 4090 (16GB+ VRAM)
+
+#### ⚠️ AMD GPUs (Linux Only - Experimental)
+**Linux with ROCm 6.3+** - Limited compatibility
+- **Supported**: RX 6700 XT, RX 7800 XT, RX 7900 XTX (8GB+ VRAM)
+- **Note**: Performance may be 10-20% slower than equivalent NVIDIA
+- **Limitation**: Windows support not available due to ROCm restrictions
+
+#### 🧪 Intel GPUs (Experimental - Limited Support)  
+**Windows/Linux** - Intel Extension for PyTorch required
+- **Supported**: Arc A750, Arc A770 (8GB+ VRAM)
+- **Note**: Performance may be 30-50% slower than equivalent NVIDIA
+- **Limitation**: Training stability may vary across different models
+
+### Memory Requirements
+- **4-6GB VRAM**: Basic LoRA training with reduced settings
+- **8-12GB VRAM**: Standard LoRA training with good performance
+- **16GB+ VRAM**: Optimal settings with fastest training speeds
+- **System RAM**: 16GB+ recommended for large datasets
 
 ---
 
@@ -79,6 +107,16 @@ git clone https://github.com/kohya-ss/sd-scripts.git
 python -m venv .venv
 .venv\Scripts\activate  # Windows
 source .venv/bin/activate  # macOS/Linux
+
+# Install PyTorch (choose your platform)
+# For NVIDIA GPUs (CUDA)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# For AMD GPUs (Linux only - ROCm)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.3
+
+# For Intel GPUs (Windows/Linux - XPU)
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/xpu
 
 # Install Python dependencies for sd-scripts
 cd sd-scripts
@@ -210,10 +248,58 @@ FluxYoga intelligently optimizes training parameters based on your graphics card
 - **Max Resolution**: 512px
 - **Performance**: Memory-optimized for stability
 
-### Supported GPUs
-- **NVIDIA**: RTX 40/30/20 series, GTX 16/10 series, Quadro, Tesla
-- **AMD**: RX 7000/6000/5000 series, Vega, Navi
-- **Intel**: Iris, UHD, HD Graphics (limited support)
+### GPU Platform Support
+
+#### NVIDIA GPUs (Windows/Linux/macOS)
+- **RTX 40 Series**: RTX 4090, 4080, 4070 Ti, 4070, 4060 Ti, 4060
+- **RTX 30 Series**: RTX 3090, 3080, 3070, 3060 Ti, 3060
+- **RTX 20 Series**: RTX 2080 Ti, 2080, 2070, 2060
+- **GTX 16/10 Series**: GTX 1660 Ti, 1060, 1050 Ti (limited support)
+- **Professional**: Quadro, Tesla, A100, H100
+
+**Installation**:
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+#### AMD GPUs (Linux Only)
+- **RX 7000 Series**: RX 7900 XTX, 7900 XT, 7800 XT, 7700 XT, 7600
+- **RX 6000 Series**: RX 6950 XT, 6900 XT, 6800 XT, 6700 XT, 6600 XT, 6500 XT
+- **RX 5000 Series**: RX 5700 XT, 5600 XT, 5500 XT
+- **Professional**: Radeon Pro, Instinct MI series
+
+**Installation (Stable ROCm 6.3)**:
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.3
+```
+
+**Installation (Nightly ROCm 6.4 - Better Performance)**:
+```bash
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/rocm6.4
+```
+
+#### Intel GPUs (Windows/Linux)
+- **Arc A-Series**: A770, A750, A580, A380
+- **Integrated Graphics**: Iris Xe, UHD Graphics (limited support)
+
+**Option 1: Native XPU Support (Recommended)**:
+```bash
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/xpu
+```
+
+**Option 2: Intel Extension for PyTorch (IPEX)**:
+```bash
+# Create conda environment first
+conda install libuv
+pip install torch==2.3.1.post0+cxx11.abi torchvision==0.18.1.post0+cxx11.abi torchaudio==2.3.1.post0+cxx11.abi intel-extension-for-pytorch==2.3.110.post0+xpu --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/cn/
+```
+
+### Performance Expectations
+- **High-end NVIDIA (RTX 4090, 3090)**: 2-4 hours for typical LoRA
+- **Mid-range NVIDIA (RTX 4070, 3070)**: 4-8 hours for typical LoRA  
+- **Budget NVIDIA (RTX 4060, 3060)**: 6-12 hours for typical LoRA
+- **AMD RX 7000/6000**: 10-20% slower than equivalent NVIDIA
+- **Intel Arc**: 30-50% slower than equivalent NVIDIA (experimental)
 
 ---
 
