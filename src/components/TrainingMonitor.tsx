@@ -129,18 +129,31 @@ const TrainingMonitor = () => {
       setLogs(prev => [...prev, 'Starting training...']);
       
       // Check if the API exists
-      if (!window.api || typeof (window.api as any).startTraining !== 'function') {
+      if (!window.api || typeof window.api.python?.startTraining !== 'function') {
         throw new Error('Training API not available');
       }
 
-      await (window.api as any).startTraining({
+      await window.api.python.startTraining({
         script: 'flux_train_network.py',
-        pythonPath: 'path/to/python',
-        scriptPath: 'path/to/scripts',
         args: [
-          '--pretrained_model_name_or_path', 'path/to/model',
-          // Add other training arguments
-        ]
+          '--pretrained_model_name_or_path', 'black-forest-labs/FLUX.1-dev',
+          '--train_data_dir', './sample/reanita',
+          '--output_dir', './output',
+          '--output_name', 'flux_lora_test',
+          '--mixed_precision', 'bf16',
+          '--save_precision', 'bf16',
+          '--network_module', 'networks.lora',
+          '--network_dim', '32',
+          '--network_alpha', '16',
+          '--train_batch_size', '1',
+          '--learning_rate', '1e-4',
+          '--max_train_epochs', '5',
+          '--save_every_n_epochs', '1',
+          '--sample_every_n_steps', '100',
+          '--sample_prompts', './sample_prompts.txt'
+        ],
+        scriptPath: './sd-scripts',
+        workingDirectory: './output'
       });
       setTrainingStatus('completed');
       setLogs(prev => [...prev, 'Training completed successfully!']);
