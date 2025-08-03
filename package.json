@@ -1,0 +1,75 @@
+{
+  "name": "fluxyoga",
+  "version": "1.0.0-alpha",
+  "description": "Advanced LoRA training interface for FLUX and SDXL models with intelligent GPU optimization",
+  "main": "main.js",
+  "author": {
+    "name": "FluxYoga Contributors",
+    "email": "contributors@fluxyoga.dev"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/manifestations/fluxyoga#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manifestations/fluxyoga.git"
+  },
+  "bugs": {
+    "url": "https://github.com/manifestations/fluxyoga/issues"
+  },
+  "keywords": [
+    "lora",
+    "flux",
+    "sdxl",
+    "stable-diffusion",
+    "ai",
+    "machine-learning",
+    "training",
+    "electron",
+    "react",
+    "typescript",
+    "gpu-optimization",
+    "kohya"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:port": "cross-env VITE_PORT=$npm_config_port vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "start": "electron .",
+    "electron": "npm run build && electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:4100 && electron . --dev\"",
+    "electron-dev:port": "concurrently \"cross-env VITE_PORT=%npm_config_port% npm run dev\" \"wait-on http://localhost:%npm_config_port% && electron . --dev\"",
+    "electron-build": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^5.18.0",
+    "@mui/material": "^5.18.0",
+    "@mui/system": "^7.2.0",
+    "@types/node": "^24.1.0",
+    "@types/uuid": "^10.0.0",
+    "electron-store": "^8.1.0",
+    "python-shell": "^5.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sharp": "^0.34.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^26.6.10",
+    "electron-builder": "^24.6.4",
+    "typescript": "^5.9.2",
+    "vite": "^4.4.9",
+    "wait-on": "^8.0.4"
+  }
+}
