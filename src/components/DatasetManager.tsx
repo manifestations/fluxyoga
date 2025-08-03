@@ -869,6 +869,79 @@ save_model_as = "safetensors"
         </Card>
       </Grid>
 
+      {/* Trigger Word Configuration - Above Images Grid */}
+      {loadedImages.length > 0 && (
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                LoRA Training Configuration
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Dataset Name"
+                    value={datasetName}
+                    onChange={(e) => setDatasetName(e.target.value)}
+                    placeholder="e.g., my_character_lora"
+                    helperText="Name for your LoRA training dataset"
+                    required
+                  />
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Trigger Word"
+                    value={triggerWord}
+                    onChange={(e) => setTriggerWord(e.target.value)}
+                    placeholder="e.g., ohwx woman, my_character"
+                    helperText="Unique word/phrase to trigger your LoRA"
+                  />
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'end', height: '100%' }}>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      onClick={handleGenerateDatasetToml}
+                      disabled={!datasetName.trim() || loadedImages.length === 0}
+                      startIcon={<SettingsIcon />}
+                      fullWidth
+                      sx={{ mb: 2.5 }}
+                    >
+                      Generate dataset.toml
+                    </Button>
+                  </Box>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={2}
+                    label="Dataset Description (Optional)"
+                    value={datasetDescription}
+                    onChange={(e) => setDatasetDescription(e.target.value)}
+                    placeholder="Brief description of your dataset..."
+                    helperText="Optional description for documentation"
+                  />
+                </Grid>
+              </Grid>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                📋 <strong>Dataset Summary:</strong> {loadedImages.length} total images, {loadedImages.filter(img => img.caption.trim()).length} with captions
+                {datasetName && ` | Output: ${datasetName.toLowerCase().replace(/\s+/g, '_')}.safetensors`}
+              </Alert>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
       {/* Image Grid for Caption Editing */}
       {loadedImages.length > 0 && (
         <Grid item xs={12}>
@@ -961,79 +1034,6 @@ save_model_as = "safetensors"
                   ✏️ Modified: {loadedImages.filter(img => img.isModified).length}
                 </Typography>
               )}
-            </CardContent>
-          </Card>
-        </Grid>
-      )}
-
-      {/* Dataset Configuration for LoRA Training */}
-      {loadedImages.length > 0 && (
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Dataset Configuration for LoRA Training
-              </Typography>
-              
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Dataset Name"
-                    value={datasetName}
-                    onChange={(e) => setDatasetName(e.target.value)}
-                    placeholder="e.g., my_character_lora"
-                    helperText="Name for your LoRA training dataset"
-                    required
-                  />
-                </Grid>
-                
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Trigger Word"
-                    value={triggerWord}
-                    onChange={(e) => setTriggerWord(e.target.value)}
-                    placeholder="e.g., ohwx woman, my_character"
-                    helperText="Unique word/phrase to trigger your LoRA"
-                  />
-                </Grid>
-                
-                <Grid item xs={12} md={4}>
-                  <Box sx={{ display: 'flex', alignItems: 'end', height: '100%' }}>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      onClick={handleGenerateDatasetToml}
-                      disabled={!datasetName.trim() || loadedImages.length === 0}
-                      startIcon={<SettingsIcon />}
-                      fullWidth
-                      sx={{ mb: 2.5 }}
-                    >
-                      Generate dataset.toml
-                    </Button>
-                  </Box>
-                </Grid>
-
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    label="Dataset Description (Optional)"
-                    value={datasetDescription}
-                    onChange={(e) => setDatasetDescription(e.target.value)}
-                    placeholder="Brief description of your dataset..."
-                    helperText="Optional description for documentation"
-                  />
-                </Grid>
-              </Grid>
-
-              <Alert severity="info" sx={{ mt: 2 }}>
-                📋 <strong>Dataset Summary:</strong> {loadedImages.length} total images, {loadedImages.filter(img => img.caption.trim()).length} with captions
-                {datasetName && ` | Output: ${datasetName.toLowerCase().replace(/\s+/g, '_')}.safetensors`}
-              </Alert>
             </CardContent>
           </Card>
         </Grid>
