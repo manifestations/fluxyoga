@@ -1,8 +1,9 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import App from './App';
+import { ConfigurationProvider, useConfiguration } from './contexts/ConfigurationContext';
 import './styles/global.css';
 
 // Theme context
@@ -216,18 +217,44 @@ const createAppTheme = (isDarkMode: boolean) => createTheme({
   },
 });
 
-// Main App wrapper with theme context
-function AppWrapper() {
-  // Load default theme from environment or config
-  const defaultTheme = process.env.NODE_ENV === 'development' 
-    ? (window as any).appConfig?.app?.defaultTheme === 'light' ? false : true
-    : true; // Default to dark mode in production
-  
-  const [isDarkMode, setIsDarkMode] = useState(defaultTheme);
+// Theme wrapper that integrates with configuration
+const ThemedApp: React.FC = () => {
+  const { config, updateSection } = useConfiguration();
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Initialize from configuration or default
+    if (config.ui.theme === 'auto') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return config.ui.theme === 'dark';
+  });
 
-  const toggleTheme = () => {
+  // Sync theme changes with configuration
+  const toggleTheme = async () => {
+    const newTheme = isDarkMode ? 'light' : 'dark';
     setIsDarkMode(!isDarkMode);
+    await updateSection('ui', { theme: newTheme });
   };
+
+  // Listen to system theme changes when in auto mode
+  useEffect(() => {
+    if (config.ui.theme === 'auto') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = (e: MediaQueryListEvent) => {
+        setIsDarkMode(e.matches);
+      };
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [config.ui.theme]);
+
+  // Update theme when configuration changes
+  useEffect(() => {
+    if (config.ui.theme === 'auto') {
+      setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } else {
+      setIsDarkMode(config.ui.theme === 'dark');
+    }
+  }, [config.ui.theme]);
 
   const theme = createAppTheme(isDarkMode);
 
@@ -238,6 +265,14 @@ function AppWrapper() {
         <App />
       </ThemeProvider>
     </ThemeContext.Provider>
+  );
+};
+
+function AppWrapper() {
+  return (
+    <ConfigurationProvider>
+      <ThemedApp />
+    </ConfigurationProvider>
   );
 }
 

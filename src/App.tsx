@@ -10,6 +10,8 @@ import {
   Tooltip,
   Alert,
   Collapse,
+  Backdrop,
+  CircularProgress,
 } from '@mui/material';
 import {
   DarkMode as DarkModeIcon,
@@ -17,9 +19,10 @@ import {
   Memory as MemoryIcon,
 } from '@mui/icons-material';
 import { ThemeContext } from './main';
+import { useConfiguration, useUIConfig } from './contexts/ConfigurationContext';
 import DatasetManager from './components/DatasetManager';
 import TrainingMonitor from './components/TrainingMonitor';
-import SettingsManager from './components/settings/SimplifiedSettingsManager';
+import SettingsManager from './components/settings/EnhancedSettingsManager';
 import SimpleTrainingForm from './components/training/SimpleTrainingForm';
 import TrainingProgressMonitor from './components/training/TrainingProgressMonitor';
 import GPUInfoCard from './components/gpu/GPUInfoCard';
@@ -53,16 +56,27 @@ function TabPanel(props: TabPanelProps) {
 }
 
 function App() {
-  const [tabValue, setTabValue] = useState(0);
   const [currentTrainingProcess, setCurrentTrainingProcess] = useState<TrainingProcess | null>(null);
   const [gpuOptimizations, setGpuOptimizations] = useState<VRAMOptimizations | null>(null);
   const [showGpuInfo, setShowGpuInfo] = useState(true);
   const { isDarkMode, toggleTheme } = useContext(ThemeContext);
+  const { config, isLoading } = useConfiguration();
+  const { ui, updateUI } = useUIConfig();
+  
+  // Use configuration for tab value
+  const [tabValue, setTabValue] = useState(ui.lastSelectedTab || 0);
 
   // Update body theme attribute when theme changes
   useEffect(() => {
     document.body.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
+
+  // Save tab selection to configuration
+  useEffect(() => {
+    if (tabValue !== ui.lastSelectedTab) {
+      updateUI({ lastSelectedTab: tabValue });
+    }
+  }, [tabValue, ui.lastSelectedTab, updateUI]);
 
   // Auto-detect GPU on startup
   useEffect(() => {
@@ -99,6 +113,18 @@ function App() {
   const handleGPUOptimizationsChange = (optimizations: VRAMOptimizations) => {
     setGpuOptimizations(optimizations);
   };
+
+  // Show loading screen while configuration is being loaded
+  if (isLoading) {
+    return (
+      <Backdrop open={true} sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <CircularProgress color="inherit" />
+          <Typography variant="h6">Loading Configuration...</Typography>
+        </Box>
+      </Backdrop>
+    );
+  }
 
   return (
     <Box 
