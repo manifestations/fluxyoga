@@ -59,6 +59,11 @@ ipcMain.handle('python:preprocess', async (event, config) => {
       ...(config.normalize ? ['--normalize'] : []),
       ...(config.sharpen ? ['--sharpen'] : []),
     ],
+    env: {
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUTF8: '1'
+    }
   };
 
   return new Promise((resolve, reject) => {
@@ -103,6 +108,11 @@ ipcMain.handle('python:generate-caption', async (event, config) => {
       ...(config.model === 'blip' ? ['--model_type', config.modelType || 'base'] : []),
       ...(config.focus ? ['--focus', ...config.focus] : []),
     ],
+    env: {
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUTF8: '1'
+    }
   };
 
   return new Promise((resolve, reject) => {

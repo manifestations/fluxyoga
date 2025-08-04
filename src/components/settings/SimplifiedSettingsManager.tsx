@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import FileSelector from '../common/FileSelector';
 import { AppSettings, DEFAULT_SETTINGS, VRAM_PRESETS, VRAMPreset } from '../../types/settings';
+import useAutoSave from '../../hooks/useAutoSave';
 
 const SettingsManager: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -36,6 +37,23 @@ const SettingsManager: React.FC = () => {
     open: false, 
     message: '', 
     severity: 'success' as 'success' | 'error' 
+  });
+
+  // Auto-save settings with immediate save on change
+  const { saveData, loadData, clearSavedData } = useAutoSave({
+    key: 'app-settings',
+    displayName: 'Application Settings',
+    data: settings,
+    onRestore: (savedData) => {
+      setSettings(savedData);
+      setOriginalSettings(savedData);
+      console.log('Application settings restored from auto-save');
+    },
+    interval: 10000, // Save every 10 seconds for settings
+    saveOnChange: true,
+    saveOnUnload: true,
+    showNotifications: true,
+    debug: false
   });
 
   useEffect(() => {

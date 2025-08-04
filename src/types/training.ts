@@ -6,9 +6,11 @@ export interface LoRATrainingConfig {
   baseModelPath: string;
   clipLPath?: string; // For FLUX only
   t5xxlPath?: string; // For FLUX only
+  vaePath?: string; // VAE/AE model path (optional)
   
   // Dataset
   datasetPath: string;
+  resolution: string; // Training resolution (e.g., "1024,1024" or "512")
   
   // Output
   outputDir: string;
@@ -73,6 +75,7 @@ export const DEFAULT_TRAINING_CONFIG: Partial<LoRATrainingConfig> = {
   learningRate: 1e-4,
   batchSize: 1,
   epochs: 10,
+  resolution: '1024,1024', // Default FLUX resolution
   networkDim: 16,
   networkAlpha: 16,
   networkModule: 'networks.lora',
@@ -81,7 +84,7 @@ export const DEFAULT_TRAINING_CONFIG: Partial<LoRATrainingConfig> = {
   mixedPrecision: 'bf16',
   gradientCheckpointing: true,
   xformersMemoryEfficientAttention: true,
-  optimizer: 'AdamW8bit',
+  optimizer: 'AdamW',
   lrScheduler: 'cosine',
   lrWarmupSteps: 100,
   outputName: 'lora',

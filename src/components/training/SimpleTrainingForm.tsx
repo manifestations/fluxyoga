@@ -28,6 +28,8 @@ import {
   Refresh as RefreshIcon,
   Help as HelpIcon,
   Memory as MemoryIcon,
+  Save as SaveIcon,
+  Restore as RestoreIcon,
 } from '@mui/icons-material';
 import { LoRATrainingConfig, DEFAULT_TRAINING_CONFIG } from '../../types/training';
 import { AppSettings, DEFAULT_SETTINGS } from '../../types/settings';
@@ -35,6 +37,8 @@ import { VRAMOptimizations } from '../../services/GPUDetection';
 import { trainingCommandBuilder } from '../../services/TrainingCommandBuilder';
 import { trainingExecutor } from '../../services/TrainingExecutor';
 import PromptManager from '../prompts/PromptManager';
+import useAutoSave from '../../hooks/useAutoSave';
+import { autoSaveService } from '../../services/AutoSaveService';
 
 interface SimpleTrainingFormProps {
   onTrainingStart?: (process: any) => void;
@@ -52,7 +56,9 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
     baseModelPath: '',
     clipLPath: '',
     t5xxlPath: '',
+    vaePath: '',
     datasetPath: '',
+    resolution: '1024,1024', // Default FLUX resolution
     outputDir: '',
     outputName: 'my_lora',
     samplePrompts: trainingCommandBuilder.getDefaultSamplePrompts('flux'),
@@ -63,6 +69,88 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
   const [isTraining, setIsTraining] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [estimatedDatasetSize, setEstimatedDatasetSize] = useState<number>(0);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  // Enhanced auto-save with immediate save on change and comprehensive restoration
+  const { 
+    saveData, 
+    loadData, 
+    clearSavedData, 
+    getSavedDataInfo 
+  } = useAutoSave({
+    key: 'training-config',
+    displayName: 'Training Configuration',
+    data: config,
+    onRestore: (savedData) => {
+      // Merge saved data with current config, preserving structure
+      setConfig(prev => ({
+        ...prev,
+        ...savedData,
+        // Ensure required fields are preserved even if not in saved data
+        samplePrompts: savedData.samplePrompts || trainingCommandBuilder.getDefaultSamplePrompts(savedData.modelType || 'flux'),
+        outputName: savedData.outputName || 'my_lora',
+        resolution: savedData.resolution || (savedData.modelType === 'flux' ? '1024,1024' : '512,512')
+      }));
+      console.log('Training configuration restored from auto-save');
+    },
+    interval: 5000, // Save every 5 seconds
+    saveOnChange: true, // Save immediately when data changes
+    saveOnUnload: true, // Save when window closes
+    showNotifications: true, // Show user-friendly notifications
+    debug: false // Disable debug logging in production
+  });
+
+  // Load saved configuration on startup
+  useEffect(() => {
+    const initializeForm = async () => {
+      try {
+        // Check if there's saved data
+        const savedInfo = await getSavedDataInfo();
+        if (savedInfo.exists) {
+          console.log(`Found saved training configuration from ${savedInfo.lastSaved}`);
+          // Data will be automatically loaded by the useAutoSave hook
+        } else {
+          console.log('No saved training configuration found, using defaults');
+        }
+      } catch (error) {
+        console.warn('Failed to initialize form with saved data:', error);
+      }
+    };
+
+    initializeForm();
+  }, [getSavedDataInfo]);
+
+  // Track auto-save status for user feedback
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    const updateStatus = () => {
+      setAutoSaveStatus('saving');
+      timeoutId = setTimeout(() => {
+        setAutoSaveStatus('saved');
+        setTimeout(() => setAutoSaveStatus('idle'), 2000);
+      }, 500);
+    };
+
+    updateStatus();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [config]);
+
+  // Auto-save configuration every minute (legacy support)
+  useEffect(() => {
+    const autoSaveInterval = setInterval(async () => {
+      try {
+        await window.api.store.set('lastTrainingConfig', config);
+      } catch (error) {
+        console.warn('Legacy auto-save failed:', error);
+      }
+    }, 60000); // 60 seconds = 1 minute
+
+    return () => clearInterval(autoSaveInterval);
+  }, [config]);
 
   // Apply GPU optimizations when available
   useEffect(() => {
@@ -124,9 +212,11 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
   };
 
   const handleModelTypeChange = (modelType: 'flux' | 'sdxl') => {
+    const defaultResolution = modelType === 'flux' ? '1024,1024' : '512,512';
     setConfig(prev => ({
       ...prev,
       modelType,
+      resolution: defaultResolution,
       samplePrompts: trainingCommandBuilder.getDefaultSamplePrompts(modelType),
     }));
   };
@@ -167,6 +257,32 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
     return config.sampleEveryNSteps;
   };
 
+  // Manual save function
+  const handleManualSave = async () => {
+    try {
+      await saveData();
+      setAutoSaveStatus('saved');
+      setTimeout(() => setAutoSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Manual save failed:', error);
+    }
+  };
+
+  // Clear saved data function
+  const handleClearSavedData = async () => {
+    try {
+      await clearSavedData();
+      console.log('Saved training configuration cleared');
+    } catch (error) {
+      console.error('Failed to clear saved data:', error);
+    }
+  };
+
+  // Reset form with option to preserve saved data
+  const handleResetForm = () => {
+    setConfig({ ...DEFAULT_TRAINING_CONFIG } as LoRATrainingConfig);
+  };
+
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', p: 2 }}>
       <Card>
@@ -175,7 +291,49 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
             <Typography variant="h5" component="h2">
               LoRA Training Configuration
             </Typography>
-            <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Auto-save status indicator */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip
+                  size="small"
+                  icon={<SaveIcon />}
+                  label={
+                    autoSaveStatus === 'saving' ? 'Saving...' :
+                    autoSaveStatus === 'saved' ? 'Saved' : 
+                    'Auto-save Active'
+                  }
+                  color={
+                    autoSaveStatus === 'saving' ? 'warning' :
+                    autoSaveStatus === 'saved' ? 'success' : 
+                    'default'
+                  }
+                  variant={autoSaveStatus === 'idle' ? 'outlined' : 'filled'}
+                />
+              </Box>
+
+              {/* Manual save/restore controls */}
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Save configuration now">
+                  <IconButton 
+                    size="small" 
+                    onClick={handleManualSave}
+                    disabled={autoSaveStatus === 'saving'}
+                  >
+                    <SaveIcon />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Clear saved data">
+                  <IconButton 
+                    size="small" 
+                    onClick={handleClearSavedData}
+                    color="error"
+                  >
+                    <RestoreIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
               <FormControlLabel
                 control={
                   <Switch
@@ -308,6 +466,27 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
               </>
             )}
 
+            {/* VAE/AE Field for both FLUX and SDXL */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  fullWidth
+                  label="VAE/AE Model (Optional)"
+                  value={config.vaePath}
+                  onChange={(e) => setConfig(prev => ({ ...prev, vaePath: e.target.value }))}
+                  placeholder="VAE or AutoEncoder model path"
+                  helperText="Optional VAE or AutoEncoder model for improved image quality"
+                />
+                <Button
+                  variant="outlined"
+                  onClick={() => handleFileSelect('vaePath', 'safetensors,ckpt,pth')}
+                  startIcon={<FolderOpenIcon />}
+                >
+                  Browse
+                </Button>
+              </Box>
+            </Grid>
+
             {/* Dataset Configuration */}
             <Grid item xs={12}>
               <Divider sx={{ my: 2 }} />
@@ -334,6 +513,37 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                   Browse
                 </Button>
               </Box>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Training Resolution</InputLabel>
+                <Select
+                  value={config.resolution}
+                  onChange={(e) => setConfig(prev => ({ ...prev, resolution: e.target.value }))}
+                  label="Training Resolution"
+                >
+                  <MenuItem value="512">512x512</MenuItem>
+                  <MenuItem value="768">768x768</MenuItem>
+                  <MenuItem value="1024">1024x1024</MenuItem>
+                  <MenuItem value="1024,1024">1024x1024 (FLUX Default)</MenuItem>
+                  <MenuItem value="512,768">512x768 (Portrait)</MenuItem>
+                  <MenuItem value="768,512">768x512 (Landscape)</MenuItem>
+                  <MenuItem value="1024,768">1024x768 (Wide)</MenuItem>
+                  <MenuItem value="768,1024">768x1024 (Tall)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Custom Resolution"
+                placeholder="e.g., 1024,1024 or 512"
+                helperText="Override preset resolution (width,height or single size)"
+                value={config.resolution}
+                onChange={(e) => setConfig(prev => ({ ...prev, resolution: e.target.value }))}
+              />
             </Grid>
 
             {/* Output Configuration */}
@@ -503,10 +713,19 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                 <Button
                   variant="outlined"
-                  onClick={() => setConfig({ ...DEFAULT_TRAINING_CONFIG } as LoRATrainingConfig)}
+                  onClick={handleResetForm}
                   startIcon={<RefreshIcon />}
                 >
-                  Reset to Defaults
+                  Reset Form
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  onClick={handleManualSave}
+                  startIcon={<SaveIcon />}
+                  disabled={autoSaveStatus === 'saving'}
+                >
+                  Save Now
                 </Button>
                 
                 <Button

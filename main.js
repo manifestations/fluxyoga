@@ -145,6 +145,11 @@ ipcMain.handle('python:preprocess', async (event, config) => {
         ...(config.normalize ? ['--normalize'] : []),
         ...(config.sharpen ? ['--sharpen'] : []),
       ],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
     };
 
     return new Promise((resolve, reject) => {
@@ -187,6 +192,11 @@ ipcMain.handle('python:generate-batch-captions', async (event, config) => {
         ...(config.style ? ['--style', config.style] : []),
         ...(config.maxTokens ? ['--max_tokens', config.maxTokens.toString()] : []),
       ],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
     };
 
     return new Promise((resolve, reject) => {
@@ -297,6 +307,11 @@ ipcMain.handle('generate-caption', async (event, config) => {
         '--style', config.style || 'detailed',
         ...(config.focus ? ['--focus', ...config.focus] : []),
       ],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
     };
 
     return new Promise((resolve, reject) => {
@@ -380,11 +395,17 @@ ipcMain.handle('start-training', async (event, config) => {
     
     const options = {
       mode: 'text',
+      encoding: 'utf8',
       pythonPath: pythonExecutable,
-      pythonOptions: ['-u'], // unbuffered output
+      pythonOptions: ['-u', '-X', 'utf8'], // unbuffered output + UTF-8 mode
       scriptPath: config.scriptPath || getSdScriptsPath(),
       args: config.args || [],
-      cwd: config.workingDirectory || process.cwd(),
+      cwd: process.cwd(), // Always use project root as working directory
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
     };
 
     console.log('Starting training with script:', config.script);

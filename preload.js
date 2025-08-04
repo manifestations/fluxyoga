@@ -38,6 +38,13 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.removeListener('python:progress', subscription);
       };
     },
+    onTrainingProgress: (callback) => {
+      const subscription = (event, data) => callback(data);
+      ipcRenderer.on('training-progress', subscription);
+      return () => {
+        ipcRenderer.removeListener('training-progress', subscription);
+      };
+    },
     onTrainingUpdate: (callback) => {
       const subscription = (event, update) => callback(update);
       ipcRenderer.on('training:update', subscription);

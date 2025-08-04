@@ -228,19 +228,19 @@ export class GPUDetectionService {
     const isNvidia = gpuInfo.vendor === 'nvidia';
     const isModern = this.isModernGPU(gpuInfo);
 
-    // High VRAM (16GB+) - Optimal settings
+    // High VRAM (16GB+) - Optimal settings for FLUX
     if (vram >= 16) {
       return {
-        recommendedBatchSize: 4,
-        enableGradientCheckpointing: false,
+        recommendedBatchSize: 1, // Very conservative for FLUX
+        enableGradientCheckpointing: true, // Essential for memory saving
         enableXformers: true,
         mixedPrecision: isNvidia ? 'bf16' : 'fp16',
         enableLowVRAMMode: false,
         enableCPUOffload: false,
-        enableGradientAccumulation: false,
-        gradientAccumulationSteps: 1,
+        enableGradientAccumulation: true,
+        gradientAccumulationSteps: 4, // Compensate for lower batch size
         maxResolution: 1024,
-        cacheLatentsToGPU: true,
+        cacheLatentsToGPU: false, // Cache to disk instead
         enableMemoryEfficientAttention: true,
       };
     }

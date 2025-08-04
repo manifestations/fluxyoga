@@ -13,9 +13,12 @@ export class TrainingCommandBuilder {
       // FLUX-specific models
       ...(config.clipLPath ? ['--clip_l', config.clipLPath] : []),
       ...(config.t5xxlPath ? ['--t5xxl', config.t5xxlPath] : []),
+      ...(config.vaePath ? ['--ae', config.vaePath] : []),
       
-      // Dataset
+      // Dataset and resolution
       '--train_data_dir', config.datasetPath,
+      '--resolution', config.resolution,
+      '--caption_extension', '.txt',
       
       // Output
       '--output_dir', config.outputDir,
@@ -28,7 +31,7 @@ export class TrainingCommandBuilder {
       '--max_train_epochs', config.epochs.toString(),
       
       // Network configuration
-      '--network_module', config.networkModule,
+      '--network_module', 'networks.lora_flux',
       '--network_dim', config.networkDim.toString(),
       '--network_alpha', config.networkAlpha.toString(),
       
@@ -58,8 +61,8 @@ export class TrainingCommandBuilder {
       '--cache_latents_to_disk',
       
       // FLUX-specific optimizations
-      '--split_qkv',
       '--fp8_base',
+      '--network_args', 'train_blocks=single',
     ];
 
     return args.filter(arg => arg !== undefined && arg !== '');
@@ -73,8 +76,12 @@ export class TrainingCommandBuilder {
       // Base model
       '--pretrained_model_name_or_path', config.baseModelPath,
       
-      // Dataset
+      // VAE (optional for SDXL)
+      ...(config.vaePath ? ['--vae', config.vaePath] : []),
+      
+      // Dataset and resolution
       '--train_data_dir', config.datasetPath,
+      '--resolution', config.resolution,
       
       // Output
       '--output_dir', config.outputDir,
@@ -161,6 +168,15 @@ export class TrainingCommandBuilder {
     if (!config.outputName) {
       errors.push('Output name is required');
     }
+    if (!config.resolution) {
+      errors.push('Training resolution is required');
+    } else {
+      // Validate resolution format
+      const resolutionPattern = /^(\d+)(,\d+)?$/;
+      if (!resolutionPattern.test(config.resolution)) {
+        errors.push('Resolution must be in format "512" or "1024,1024"');
+      }
+    }
 
     // FLUX-specific validation
     if (config.modelType === 'flux') {
@@ -210,24 +226,17 @@ export class TrainingCommandBuilder {
    * Generate default sample prompts based on model type
    */
   getDefaultSamplePrompts(modelType: 'flux' | 'sdxl'): string[] {
-    const commonPrompts = [
-      'a beautiful landscape with mountains and lakes',
-      'a portrait of a person, professional photography',
-      'a cute animal, detailed fur, studio lighting',
-      'a futuristic city skyline at sunset',
-    ];
-
     if (modelType === 'flux') {
       return [
-        ...commonPrompts,
+        'a beautiful landscape with mountains and lakes',
+        'a portrait of a person, professional photography',
         'highly detailed digital art, trending on artstation',
-        'photorealistic render, octane render, 8k',
       ];
     } else {
       return [
-        ...commonPrompts,
+        'a beautiful landscape with mountains and lakes', 
+        'a portrait of a person, professional photography',
         'masterpiece, best quality, ultra detailed',
-        'concept art, digital painting, trending on pixiv',
       ];
     }
   }
