@@ -8,15 +8,13 @@ import {
   Paper,
   IconButton,
   Tooltip,
-  Alert,
-  Collapse,
   Backdrop,
   CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
-  Memory as MemoryIcon,
 } from '@mui/icons-material';
 import { ThemeContext } from './main';
 import { useConfiguration, useUIConfig } from './contexts/ConfigurationContext';
@@ -25,7 +23,8 @@ import TrainingMonitor from './components/TrainingMonitor';
 import SettingsManager from './components/settings/EnhancedSettingsManager';
 import SimpleTrainingForm from './components/training/SimpleTrainingForm';
 import TrainingProgressMonitor from './components/training/TrainingProgressMonitor';
-import GPUInfoCard from './components/gpu/GPUInfoCard';
+import BottomGPUBar from './components/gpu/BottomGPUBar';
+import SystemValidation from './components/system/SystemValidation';
 import { TrainingProcess } from './types/training';
 import { VRAMOptimizations, gpuDetection } from './services/GPUDetection';
 
@@ -58,7 +57,7 @@ function TabPanel(props: TabPanelProps) {
 function App() {
   const [currentTrainingProcess, setCurrentTrainingProcess] = useState<TrainingProcess | null>(null);
   const [gpuOptimizations, setGpuOptimizations] = useState<VRAMOptimizations | null>(null);
-  const [showGpuInfo, setShowGpuInfo] = useState(true);
+  const [isSystemValid, setIsSystemValid] = useState<boolean | null>(null);
   const { isDarkMode, toggleTheme } = useContext(ThemeContext);
   const { config, isLoading } = useConfiguration();
   const { ui, updateUI } = useUIConfig();
@@ -101,7 +100,7 @@ function App() {
 
   const handleTrainingStart = (process: TrainingProcess) => {
     setCurrentTrainingProcess(process);
-    setTabValue(1); // Switch to progress monitor tab
+    // Stay on the same tab since training monitor is now integrated
   };
 
   const handleTrainingProgress = (progress: any) => {
@@ -134,7 +133,7 @@ function App() {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
-        padding: '30px 20px',
+        padding: '30px 20px 60px 20px', // Added bottom padding for GPU bar
       }}
     >
       <Container 
@@ -195,36 +194,11 @@ function App() {
             sx={{
               color: isDarkMode ? 'hsl(240, 5%, 64.9%)' : '#757575',
               fontSize: '0.9rem',
-              mb: 3,
+              mb: 2,
             }}
           >
             Advanced LoRA training interface for FLUX and SDXL models
           </Typography>
-
-          {/* GPU Information Card */}
-          <Collapse in={showGpuInfo}>
-            <Box sx={{ mb: 3 }}>
-              <GPUInfoCard onOptimizationsChange={handleGPUOptimizationsChange} />
-            </Box>
-          </Collapse>
-
-          {gpuOptimizations && (
-            <Alert 
-              severity="info" 
-              sx={{ mb: 3 }}
-              action={
-                <IconButton
-                  size="small"
-                  onClick={() => setShowGpuInfo(!showGpuInfo)}
-                  sx={{ color: 'inherit' }}
-                >
-                  <MemoryIcon />
-                </IconButton>
-              }
-            >
-              GPU optimizations applied automatically. Training settings have been adjusted for your {gpuOptimizations.enableLowVRAMMode ? 'low VRAM' : 'high VRAM'} configuration.
-            </Alert>
-          )}
         </Box>
         
         <Paper 
@@ -247,41 +221,57 @@ function App() {
               mb: 2,
             }}
           >
-            <Tab label="Quick Train" />
-            <Tab label="Progress Monitor" />
+            <Tab label="Train" disabled={isSystemValid === false} />
             <Tab label="Dataset" />
-            <Tab label="Monitor" />
-            <Tab label="Settings" />
+            <Tab label="System" />
+            <Tab label="Settings & Config" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
-            <SimpleTrainingForm 
-              onTrainingStart={handleTrainingStart}
-              onTrainingProgress={handleTrainingProgress}
-              gpuOptimizations={gpuOptimizations}
-            />
+            {isSystemValid === false ? (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography>
+                  <strong>System validation required:</strong> Please resolve system issues in the System tab before training.
+                </Typography>
+              </Alert>
+            ) : (
+              <SimpleTrainingForm 
+                onTrainingStart={handleTrainingStart}
+                onTrainingProgress={handleTrainingProgress}
+                gpuOptimizations={gpuOptimizations}
+                currentTrainingProcess={currentTrainingProcess}
+              />
+            )}
           </TabPanel>
 
           <TabPanel value={tabValue} index={1}>
-            <TrainingProgressMonitor 
-              process={currentTrainingProcess}
-              onProcessUpdate={setCurrentTrainingProcess}
-            />
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={2}>
             <DatasetManager />
           </TabPanel>
 
-          <TabPanel value={tabValue} index={3}>
-            <TrainingMonitor />
+          <TabPanel value={tabValue} index={2}>
+            <SystemValidation onValidationComplete={setIsSystemValid} />
           </TabPanel>
 
-          <TabPanel value={tabValue} index={4}>
+          <TabPanel value={tabValue} index={3}>
+            <Box sx={{ mb: 2 }}>
+              <Alert severity="info">
+                <Typography variant="body2">
+                  <strong>Settings & Configuration:</strong> Configure VRAM presets, training defaults, 
+                  UI preferences, file paths, and application behavior. Import/export your settings 
+                  and manage recent items.
+                </Typography>
+              </Alert>
+            </Box>
             <SettingsManager />
           </TabPanel>
         </Paper>
       </Container>
+
+      {/* Bottom GPU Bar - Fixed at bottom */}
+      <BottomGPUBar 
+        onOptimizationsChange={handleGPUOptimizationsChange}
+        isDarkMode={isDarkMode}
+      />
     </Box>
   );
 }

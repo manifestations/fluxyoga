@@ -26,6 +26,14 @@ contextBridge.exposeInMainWorld(
       stopTraining: (trainingId) => ipcRenderer.invoke('stop-training', trainingId),
       pauseTraining: (trainingId) => ipcRenderer.invoke('pause-training', trainingId),
       resumeTraining: (trainingId) => ipcRenderer.invoke('resume-training', trainingId),
+      clearVRAM: () => ipcRenderer.invoke('python:clear-vram'),
+    },
+
+    // System validation
+    system: {
+      validateSdScripts: () => ipcRenderer.invoke('validate-sd-scripts'),
+      checkPythonRequirements: () => ipcRenderer.invoke('check-python-requirements'),
+      getSystemPaths: () => ipcRenderer.invoke('get-system-paths'),
     },
     
     // Training progress callbacks
@@ -39,7 +47,10 @@ contextBridge.exposeInMainWorld(
       };
     },
     onTrainingProgress: (callback) => {
-      const subscription = (event, data) => callback(data);
+      const subscription = (event, data) => {
+        console.log('Training progress event received:', data?.type || 'unknown event type');
+        callback(data);
+      };
       ipcRenderer.on('training-progress', subscription);
       return () => {
         ipcRenderer.removeListener('training-progress', subscription);
@@ -52,6 +63,8 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.removeListener('training:update', subscription);
       };
     },
+    // Check if a training process is still running
+    checkTrainingStatus: (processId) => ipcRenderer.invoke('check-training-status', processId),
     
     // Store operations
     store: {

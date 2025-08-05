@@ -4,7 +4,7 @@ const fs = require('fs');
 const Store = require('electron-store');
 const { PythonShell } = require('python-shell');
 const sharp = require('sharp');
-const { getPythonExecutablePath, getScriptsPath, getSdScriptsPath } = require('./utils/python-path');
+const { getPythonExecutablePath, getScriptsPath, getSdScriptsPath, validateSdScriptsInstallation, checkPythonRequirements } = require('./utils/python-path');
 
 // Load application configuration
 const appConfig = require('./app.config.js');
@@ -128,8 +128,14 @@ ipcMain.handle('electron-store-clear', async (event) => {
 // Python operations
 ipcMain.handle('python:preprocess', async (event, config) => {
   try {
-    // Use the dynamic Python executable path
-    const pythonExecutable = getPythonExecutablePath();
+    // Use the dynamic Python executable path with error handling
+    let pythonExecutable;
+    try {
+      pythonExecutable = getPythonExecutablePath();
+    } catch (pathError) {
+      console.error('Error getting Python executable path:', pathError);
+      throw new Error(`Failed to locate Python executable: ${pathError.message}`);
+    }
     
     const options = {
       mode: 'text',
@@ -177,8 +183,14 @@ ipcMain.handle('python:preprocess', async (event, config) => {
 
 ipcMain.handle('python:generate-batch-captions', async (event, config) => {
   try {
-    // Use the dynamic Python executable path
-    const pythonExecutable = getPythonExecutablePath();
+    // Use the dynamic Python executable path with error handling
+    let pythonExecutable;
+    try {
+      pythonExecutable = getPythonExecutablePath();
+    } catch (pathError) {
+      console.error('Error getting Python executable path:', pathError);
+      throw new Error(`Failed to locate Python executable: ${pathError.message}`);
+    }
     
     const options = {
       mode: 'text',
@@ -291,8 +303,14 @@ ipcMain.handle('scan-directory', async (event, dirPath) => {
 
 ipcMain.handle('generate-caption', async (event, config) => {
   try {
-    // Use the dynamic Python executable path
-    const pythonExecutable = getPythonExecutablePath();
+    // Use the dynamic Python executable path with error handling
+    let pythonExecutable;
+    try {
+      pythonExecutable = getPythonExecutablePath();
+    } catch (pathError) {
+      console.error('Error getting Python executable path:', pathError);
+      throw new Error(`Failed to locate Python executable: ${pathError.message}`);
+    }
     
     // Initialize the LLM based on config.model
     const pythonScript = config.model === 'gpt-4-vision' ? 'generate_gpt4v_caption.py' : 'generate_blip_caption.py';
@@ -390,8 +408,14 @@ ipcMain.handle('export-dataset', async (event, { dataset, format, outputPath }) 
 // IPC handlers for training operations
 ipcMain.handle('start-training', async (event, config) => {
   try {
-    // Use the dynamic Python executable path
-    const pythonExecutable = getPythonExecutablePath();
+    // Use the dynamic Python executable path with error handling
+    let pythonExecutable;
+    try {
+      pythonExecutable = getPythonExecutablePath();
+    } catch (pathError) {
+      console.error('Error getting Python executable path:', pathError);
+      throw new Error(`Failed to locate Python executable: ${pathError.message}`);
+    }
     
     const options = {
       mode: 'text',
@@ -439,50 +463,257 @@ ipcMain.handle('start-training', async (event, config) => {
       });
     });
 
-    return new Promise((resolve, reject) => {
-      pyshell.end((err, code, signal) => {
-        if (err) {
-          console.error('Training error:', err);
-          event.sender.send('training-progress', {
-            processId,
-            type: 'error',
-            message: err.message,
-            timestamp: new Date().toISOString(),
-          });
-          reject(err);
-        } else {
-          console.log('Training completed with code:', code);
-          event.sender.send('training-progress', {
-            processId,
-            type: 'completed',
-            code,
-            signal,
-            timestamp: new Date().toISOString(),
-          });
-          resolve({ processId, code, signal });
-        }
-      });
+    // Set up end handler
+    pyshell.end((err, exitCode, exitSignal) => {
+      if (err) {
+        console.error('Training process ended with error:', err);
+        event.sender.send('training-progress', {
+          processId,
+          type: 'error',
+          message: `Training process error: ${err.message || 'Unknown error'}`,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.log(`Training process completed with exit code ${exitCode}`);
+        event.sender.send('training-progress', {
+          processId,
+          type: 'completed',
+          message: `Training process completed with exit code ${exitCode}`,
+          timestamp: new Date().toISOString(),
+        });
+      }
     });
+
+    // Setup heartbeat to ensure UI knows process is still running
+    const heartbeatInterval = setInterval(() => {
+      if (pyshell.terminated) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
+      
+      event.sender.send('training-progress', {
+        processId,
+        type: 'heartbeat',
+        message: 'Training process is still running',
+        timestamp: new Date().toISOString(),
+      });
+    }, 5000); // Send heartbeat every 5 seconds
+
+    // Instead of waiting, just return the process ID immediately
+    setTimeout(() => {
+      event.sender.send('training-progress', {
+        processId,
+        type: 'started',
+        message: 'Training process started',
+        timestamp: new Date().toISOString(),
+      });
+    }, 0);
+
+    return { processId };
   } catch (error) {
     console.error('Training startup error:', error);
     throw error;
   }
 });
 
-ipcMain.handle('cancel-training', async (event, processId) => {
+// Handler to check if a training process is still active
+ipcMain.handle('check-training-status', async (event, processId) => {
   try {
-    // Note: This is a simplified implementation
-    // In a real scenario, you'd need to track the actual process PIDs
-    // and implement proper process termination
-    console.log('Cancelling training process:', processId);
+    // This is a simplified implementation
+    // In a real production app, you would need to track active processes
+    // For now, we'll just return true to indicate the process exists
+    // and is still running (since we don't have proper process tracking yet)
     
-    // For now, we'll just send a cancellation message
+    console.log('Checking training process status:', processId);
+    
+    // Send a heartbeat immediately to refresh UI state
     event.sender.send('training-progress', {
       processId,
-      type: 'cancelled',
-      message: 'Training cancelled by user',
+      type: 'heartbeat',
+      message: 'Training process status check',
       timestamp: new Date().toISOString(),
     });
+    
+    return { 
+      exists: true,  // Placeholder - in production you'd check if process exists
+      running: true  // Placeholder - in production you'd check if process is still running
+    };
+  } catch (error) {
+    console.error('Error checking training status:', error);
+    throw error;
+  }
+});
+
+// Clear VRAM handler
+ipcMain.handle('python:clear-vram', async (event) => {
+  try {
+    // Use the dynamic Python executable path with error handling
+    let pythonExecutable;
+    try {
+      pythonExecutable = getPythonExecutablePath();
+    } catch (pathError) {
+      console.error('Error getting Python executable path:', pathError);
+      throw new Error(`Failed to locate Python executable: ${pathError.message}`);
+    }
+    
+    const options = {
+      mode: 'text',
+      pythonPath: pythonExecutable,
+      scriptPath: getScriptsPath(),
+      args: [],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+      // Create a simple Python script to clear VRAM
+      const clearVRAMScript = `
+import gc
+try:
+    import torch
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        print("CUDA cache cleared successfully")
+    else:
+        print("CUDA not available")
+except ImportError:
+    print("PyTorch not available")
+
+# Force garbage collection
+gc.collect()
+print("Python garbage collection completed")
+`;
+
+      // Write temporary script
+      const tempScriptPath = path.join(__dirname, 'temp_clear_vram.py');
+      fs.writeFileSync(tempScriptPath, clearVRAMScript);
+
+      let pyshell = new PythonShell(tempScriptPath, {
+        ...options,
+        scriptPath: __dirname
+      });
+
+      let output = [];
+
+      pyshell.on('message', (message) => {
+        console.log('Clear VRAM output:', message);
+        output.push(message);
+      });
+
+      pyshell.end((err) => {
+        // Clean up temporary script
+        try {
+          fs.unlinkSync(tempScriptPath);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup temp script:', cleanupError);
+        }
+
+        if (err) {
+          console.error('Clear VRAM error:', err);
+          reject(err);
+        } else {
+          console.log('VRAM cleared successfully');
+          resolve({ success: true, output });
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error clearing VRAM:', error);
+    throw error;
+  }
+});
+
+// System validation handlers
+ipcMain.handle('validate-sd-scripts', async (event) => {
+  try {
+    const validation = await validateSdScriptsInstallation();
+    return validation;
+  } catch (error) {
+    console.error('Error validating sd-scripts:', error);
+    return {
+      isValid: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('check-python-requirements', async (event) => {
+  try {
+    const requirements = await checkPythonRequirements();
+    return requirements;
+  } catch (error) {
+    console.error('Error checking Python requirements:', error);
+    return {
+      isValid: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('get-system-paths', async (event) => {
+  try {
+    return {
+      python: getPythonExecutablePath(),
+      scripts: getScriptsPath(),
+      sdScripts: getSdScriptsPath()
+    };
+  } catch (error) {
+    console.error('Error getting system paths:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('cancel-training', async (event, processId) => {
+  try {
+    // Implementation to track and kill the actual Python process
+    console.log('Cancelling training process:', processId);
+    
+    // For Windows, we can use taskkill to forcefully terminate the Python process
+    // This is a more reliable approach than just sending a cancellation message
+    if (process.platform === 'win32') {
+      const { exec } = require('child_process');
+      
+      // First try to find Python processes that might be our training process
+      exec('tasklist /fi "imagename eq python.exe" /fo csv', (err, stdout) => {
+        if (err) {
+          console.error('Error listing Python processes:', err);
+          return;
+        }
+        
+        console.log('Active Python processes:', stdout);
+        
+        // As a fallback, try to kill any Python process that might be our training
+        // In a production app, you would keep track of the actual PID
+        exec('taskkill /f /im python.exe', (killErr, killStdout) => {
+          if (killErr) {
+            console.error('Error killing Python processes:', killErr);
+          } else {
+            console.log('Python processes terminated:', killStdout);
+          }
+          
+          // Regardless of kill success, send a cancellation message to the UI
+          event.sender.send('training-progress', {
+            processId,
+            type: 'cancelled',
+            message: 'Training cancelled by user',
+            timestamp: new Date().toISOString(),
+          });
+        });
+      });
+    } else {
+      // For non-Windows platforms, we'd use a different approach
+      // For now, just send the cancellation message
+      event.sender.send('training-progress', {
+        processId,
+        type: 'cancelled',
+        message: 'Training cancelled by user',
+        timestamp: new Date().toISOString(),
+      });
+    }
     
     return { success: true };
   } catch (error) {

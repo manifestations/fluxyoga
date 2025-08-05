@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import App from './App';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import { ConfigurationProvider, useConfiguration } from './contexts/ConfigurationContext';
 import './styles/global.css';
 
@@ -262,7 +263,9 @@ const ThemedApp: React.FC = () => {
     <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <App />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
       </ThemeProvider>
     </ThemeContext.Provider>
   );

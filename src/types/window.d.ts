@@ -73,7 +73,7 @@ interface Window {
     // Progress callbacks
     onProgress: (callback: (value: number) => void) => () => void;
     onTrainingUpdate: (callback: (update: any) => void) => () => void;
-    onTrainingProgress: (callback: (data: any) => void) => void;
+    onTrainingProgress: (callback: (data: any) => void) => () => void;
     
     // Training operations
     startTraining: (config: any) => Promise<any>;

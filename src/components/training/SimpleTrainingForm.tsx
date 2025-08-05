@@ -19,6 +19,7 @@ import {
   Tooltip,
   Switch,
   FormControlLabel,
+  LinearProgress,
 } from '@mui/material';
 import {
   FolderOpen as FolderOpenIcon,
@@ -31,7 +32,7 @@ import {
   Save as SaveIcon,
   Restore as RestoreIcon,
 } from '@mui/icons-material';
-import { LoRATrainingConfig, DEFAULT_TRAINING_CONFIG } from '../../types/training';
+import { LoRATrainingConfig, DEFAULT_TRAINING_CONFIG, TrainingProcess } from '../../types/training';
 import { AppSettings, DEFAULT_SETTINGS } from '../../types/settings';
 import { VRAMOptimizations } from '../../services/GPUDetection';
 import { trainingCommandBuilder } from '../../services/TrainingCommandBuilder';
@@ -39,17 +40,37 @@ import { trainingExecutor } from '../../services/TrainingExecutor';
 import PromptManager from '../prompts/PromptManager';
 import useAutoSave from '../../hooks/useAutoSave';
 import { autoSaveService } from '../../services/AutoSaveService';
+import { SxProps } from '@mui/system';
+
+// Common styles for form inputs
+const commonInputStyles: SxProps = {
+  '& .MuiOutlinedInput-root': {
+    border: '2px solid',
+    borderColor: 'divider',
+    '&:hover': {
+      borderColor: 'primary.main',
+    },
+    '&.Mui-focused': {
+      borderColor: 'primary.main',
+    },
+    '&.Mui-error': {
+      borderColor: 'error.main',
+    },
+  },
+};
 
 interface SimpleTrainingFormProps {
   onTrainingStart?: (process: any) => void;
   onTrainingProgress?: (progress: any) => void;
   gpuOptimizations?: VRAMOptimizations | null;
+  currentTrainingProcess?: TrainingProcess | null;
 }
 
 const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
   onTrainingStart,
   onTrainingProgress,
   gpuOptimizations,
+  currentTrainingProcess,
 }) => {
   const [config, setConfig] = useState<LoRATrainingConfig>({
     modelType: 'flux',
@@ -70,6 +91,10 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
   const [validationResult, setValidationResult] = useState<any>(null);
   const [estimatedDatasetSize, setEstimatedDatasetSize] = useState<number>(0);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [trainingLogs, setTrainingLogs] = useState<string[]>([]);
+  const [currentEpoch, setCurrentEpoch] = useState(0);
+  const [totalEpochs, setTotalEpochs] = useState(0);
+  const [currentProcessId, setCurrentProcessId] = useState<string | null>(null);
 
   // Enhanced auto-save with immediate save on change and comprehensive restoration
   const { 
@@ -82,33 +107,28 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
     displayName: 'Training Configuration',
     data: config,
     onRestore: (savedData) => {
-      // Merge saved data with current config, preserving structure
       setConfig(prev => ({
         ...prev,
         ...savedData,
-        // Ensure required fields are preserved even if not in saved data
         samplePrompts: savedData.samplePrompts || trainingCommandBuilder.getDefaultSamplePrompts(savedData.modelType || 'flux'),
         outputName: savedData.outputName || 'my_lora',
         resolution: savedData.resolution || (savedData.modelType === 'flux' ? '1024,1024' : '512,512')
       }));
       console.log('Training configuration restored from auto-save');
     },
-    interval: 5000, // Save every 5 seconds
-    saveOnChange: true, // Save immediately when data changes
-    saveOnUnload: true, // Save when window closes
-    showNotifications: true, // Show user-friendly notifications
-    debug: false // Disable debug logging in production
+    interval: 30000,
+    saveOnChange: false,
+    saveOnUnload: true,
+    showNotifications: false,
+    debug: false
   });
 
-  // Load saved configuration on startup
   useEffect(() => {
     const initializeForm = async () => {
       try {
-        // Check if there's saved data
         const savedInfo = await getSavedDataInfo();
         if (savedInfo.exists) {
           console.log(`Found saved training configuration from ${savedInfo.lastSaved}`);
-          // Data will be automatically loaded by the useAutoSave hook
         } else {
           console.log('No saved training configuration found, using defaults');
         }
@@ -116,43 +136,31 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
         console.warn('Failed to initialize form with saved data:', error);
       }
     };
-
     initializeForm();
   }, [getSavedDataInfo]);
 
-  // Track auto-save status for user feedback
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    
-    const updateStatus = () => {
-      setAutoSaveStatus('saving');
+    if (autoSaveStatus === 'saving') {
       timeoutId = setTimeout(() => {
         setAutoSaveStatus('saved');
         setTimeout(() => setAutoSaveStatus('idle'), 2000);
-      }, 500);
-    };
-
-    updateStatus();
-
+      }, 1000); // Increased to 1 second to allow save to complete
+    }
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [config]);
+  }, [autoSaveStatus]);
 
-  // Auto-save configuration every minute (legacy support)
+  // Debounced config change effect to prevent excessive saving
   useEffect(() => {
-    const autoSaveInterval = setInterval(async () => {
-      try {
-        await window.api.store.set('lastTrainingConfig', config);
-      } catch (error) {
-        console.warn('Legacy auto-save failed:', error);
-      }
-    }, 60000); // 60 seconds = 1 minute
+    const timeoutId = setTimeout(() => {
+      setAutoSaveStatus('saving');
+    }, 300); // 300ms debounce
 
-    return () => clearInterval(autoSaveInterval);
+    return () => clearTimeout(timeoutId);
   }, [config]);
 
-  // Apply GPU optimizations when available
   useEffect(() => {
     if (gpuOptimizations) {
       setConfig(prev => ({
@@ -165,13 +173,11 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
     }
   }, [gpuOptimizations]);
 
-  // Validate configuration whenever it changes
   useEffect(() => {
     const result = trainingCommandBuilder.validateConfig(config);
     setValidationResult(result);
   }, [config]);
 
-  // Estimate dataset size when dataset path changes
   useEffect(() => {
     if (config.datasetPath) {
       trainingExecutor.estimateDatasetSize(config.datasetPath)
@@ -179,6 +185,78 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
         .catch(() => setEstimatedDatasetSize(0));
     }
   }, [config.datasetPath]);
+
+  useEffect(() => {
+    if (!(window.api as any)?.onTrainingProgress) return;
+    
+    const unsubscribe = (window.api as any).onTrainingProgress((progressData: any) => {
+      // Always update logs if there's a message
+      if (progressData.message) {
+        setTrainingLogs(prev => [...prev.slice(-50), progressData.message]);
+        // Parse epoch info
+        const epochMatch = progressData.message.match(/epoch (\d+)\/(\d+)/i);
+        if (epochMatch) {
+          setCurrentEpoch(parseInt(epochMatch[1]));
+          setTotalEpochs(parseInt(epochMatch[2]));
+        } else {
+          const altEpochMatch = progressData.message.match(/epoch[:\s]*(\d+)(?:[\/\s]*of[\/\s]*(\d+))?/i);
+          if (altEpochMatch) {
+            setCurrentEpoch(parseInt(altEpochMatch[1]));
+            if (altEpochMatch[2]) setTotalEpochs(parseInt(altEpochMatch[2]));
+          }
+        }
+      }
+      
+      // Handle different event types
+      switch (progressData.type) {
+        case 'started':
+          setIsTraining(true);
+          console.log('Training started:', progressData.processId);
+          break;
+        case 'progress':
+          // Already handled above
+          setIsTraining(true); // Ensure training state is active
+          break;
+        case 'heartbeat':
+          console.log('Training heartbeat received at:', new Date().toLocaleTimeString());
+          setIsTraining(true); // Ensure training state is active
+          break;
+        case 'completed':
+          console.log('Training completed');
+          setIsTraining(false);
+          break;
+        case 'error':
+          console.error('Training error:', progressData.message);
+          setIsTraining(false);
+          break;
+        case 'cancelled':
+          console.log('Training cancelled');
+          setIsTraining(false);
+          break;
+      }
+      
+      if (onTrainingProgress) onTrainingProgress(progressData);
+    });
+    
+    // Set up an additional heartbeat check
+    const heartbeatChecker = setInterval(() => {
+      if (isTraining && (window.api as any)?.checkTrainingStatus) {
+        console.log('Requesting training status check...');
+        (window.api as any).checkTrainingStatus(currentProcessId || 'current')
+          .catch((err: any) => {
+            console.error('Error checking training status:', err);
+          });
+      }
+    }, 15000); // Check every 15 seconds
+    
+    return () => { 
+      if (typeof unsubscribe === 'function') {
+        console.log('Unsubscribing from training progress events');
+        unsubscribe();
+      }
+      clearInterval(heartbeatChecker);
+    };
+  }, [onTrainingProgress, isTraining, currentProcessId]);
 
   const handleFileSelect = async (field: keyof LoRATrainingConfig, filters?: string) => {
     try {
@@ -188,7 +266,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
           { name: 'Model Files', extensions: filters.split(',') }
         ] : undefined,
       });
-
       if (!result.canceled && result.filePaths.length > 0) {
         setConfig(prev => ({ ...prev, [field]: result.filePaths[0] }));
       }
@@ -202,7 +279,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
       const result = await window.api.showOpenDialog({
         properties: ['openDirectory'],
       });
-
       if (!result.canceled && result.filePaths.length > 0) {
         setConfig(prev => ({ ...prev, [field]: result.filePaths[0] }));
       }
@@ -222,23 +298,38 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
   };
 
   const handleStartTraining = async () => {
-    if (!validationResult?.isValid) {
-      return;
-    }
-
+    if (!validationResult?.isValid) return;
+    setIsTraining(true);
+    setTrainingLogs([]);
+    setCurrentEpoch(0);
+    setTotalEpochs(config.epochs);
     try {
-      setIsTraining(true);
-      const process = await trainingExecutor.startTraining(config);
+      const script = trainingCommandBuilder.getTrainingScript(config.modelType);
+      const args = config.modelType === 'flux' 
+        ? trainingCommandBuilder.buildFluxCommand(config)
+        : trainingCommandBuilder.buildSDXLCommand(config);
+      const trainingConfig = {
+        script,
+        args,
+        scriptPath: './sd-scripts',
+        workingDirectory: config.outputDir,
+      };
       
-      // Set up progress monitoring
-      trainingExecutor.onProgress(process.id, (progress) => {
-        onTrainingProgress?.(progress);
+      console.log('Starting training with config:', trainingConfig);
+      const result = await window.api.python.startTraining(trainingConfig).catch(error => {
+        setIsTraining(false);
+        setTrainingLogs(prev => [...prev, `Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+        throw error;
       });
-
-      onTrainingStart?.(process);
+      
+      console.log('Training process started with ID:', result?.processId);
+      
+      // Store the process ID in state for later reference (for cancel operations)
+      setCurrentProcessId(result?.processId || null);
+      
     } catch (error) {
-      console.error('Failed to start training:', error);
       setIsTraining(false);
+      setTrainingLogs(prev => [...prev, `Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
     }
   };
 
@@ -257,7 +348,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
     return config.sampleEveryNSteps;
   };
 
-  // Manual save function
   const handleManualSave = async () => {
     try {
       await saveData();
@@ -268,17 +358,14 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
     }
   };
 
-  // Clear saved data function
   const handleClearSavedData = async () => {
     try {
       await clearSavedData();
-      console.log('Saved training configuration cleared');
     } catch (error) {
       console.error('Failed to clear saved data:', error);
     }
   };
 
-  // Reset form with option to preserve saved data
   const handleResetForm = () => {
     setConfig({ ...DEFAULT_TRAINING_CONFIG } as LoRATrainingConfig);
   };
@@ -292,7 +379,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
               LoRA Training Configuration
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              {/* Auto-save status indicator */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Chip
                   size="small"
@@ -310,8 +396,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                   variant={autoSaveStatus === 'idle' ? 'outlined' : 'filled'}
                 />
               </Box>
-
-              {/* Manual save/restore controls */}
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Tooltip title="Save configuration now">
                   <IconButton 
@@ -322,7 +406,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                     <SaveIcon />
                   </IconButton>
                 </Tooltip>
-                
                 <Tooltip title="Clear saved data">
                   <IconButton 
                     size="small" 
@@ -333,7 +416,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                   </IconButton>
                 </Tooltip>
               </Box>
-
               <FormControlLabel
                 control={
                   <Switch
@@ -341,12 +423,20 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                     onChange={(e) => setShowAdvanced(e.target.checked)}
                   />
                 }
-                label="Advanced Settings"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography>Advanced Settings</Typography>
+                    <Chip 
+                      label={showAdvanced ? 'Shown' : 'Hidden'} 
+                      size="small" 
+                      color={showAdvanced ? 'primary' : 'default'}
+                      variant={showAdvanced ? 'filled' : 'outlined'}
+                    />
+                  </Box>
+                }
               />
             </Box>
           </Box>
-
-          {/* GPU Optimization Status */}
           {gpuOptimizations && (
             <Alert 
               severity="success" 
@@ -359,8 +449,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
               </Typography>
             </Alert>
           )}
-
-          {/* Validation Alerts */}
           {validationResult && !validationResult.isValid && (
             <Alert severity="error" sx={{ mb: 2 }}>
               <strong>Configuration Errors:</strong>
@@ -371,7 +459,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
               </ul>
             </Alert>
           )}
-
           {validationResult && validationResult.warnings.length > 0 && (
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>Warnings:</strong>
@@ -382,213 +469,163 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
               </ul>
             </Alert>
           )}
-
           <Grid container spacing={3}>
-            {/* Model Configuration */}
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Model Configuration
-              </Typography>
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <FormControl fullWidth>
+            {/* Model Type Selection */}
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth sx={commonInputStyles}>
                 <InputLabel>Model Type</InputLabel>
                 <Select
                   value={config.modelType}
-                  onChange={(e) => handleModelTypeChange(e.target.value as 'flux' | 'sdxl')}
                   label="Model Type"
+                  onChange={(e) => handleModelTypeChange(e.target.value as 'flux' | 'sdxl')}
                 >
-                  <MenuItem value="flux">FLUX.1</MenuItem>
-                  <MenuItem value="sdxl">SDXL</MenuItem>
+                  <MenuItem value="flux">FLUX (1024x1024)</MenuItem>
+                  <MenuItem value="sdxl">SDXL (512x512)</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={8}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+            {/* Resolution */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Training Resolution"
+                value={config.resolution}
+                onChange={(e) => setConfig(prev => ({ ...prev, resolution: e.target.value }))}
+                placeholder="1024,1024"
+                helperText="Format: width,height (e.g., 1024,1024)"
+                sx={commonInputStyles}
+              />
+            </Grid>
+
+            {/* Base Model Path */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <TextField
                   fullWidth
                   label="Base Model Path"
                   value={config.baseModelPath}
                   onChange={(e) => setConfig(prev => ({ ...prev, baseModelPath: e.target.value }))}
-                  placeholder="Select base model file (.safetensors, .ckpt)"
+                  placeholder="Path to base model file"
+                  error={validationResult?.errors.some(err => err.includes('base model'))}
+                  sx={commonInputStyles}
                 />
-                <Button
-                  variant="contained"
-                  onClick={() => handleFileSelect('baseModelPath', 'safetensors,ckpt')}
-                  startIcon={<FolderOpenIcon />}
-                >
-                  Browse
-                </Button>
+                <IconButton onClick={() => handleFileSelect('baseModelPath', 'safetensors,ckpt,pt')}>
+                  <FolderOpenIcon />
+                </IconButton>
               </Box>
             </Grid>
 
+            {/* FLUX-specific model paths */}
             {config.modelType === 'flux' && (
               <>
                 <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                     <TextField
                       fullWidth
-                      label="CLIP-L Model (Optional)"
-                      value={config.clipLPath}
+                      label="CLIP-L Path"
+                      value={config.clipLPath || ''}
                       onChange={(e) => setConfig(prev => ({ ...prev, clipLPath: e.target.value }))}
-                      placeholder="CLIP-L model path"
+                      placeholder="Path to CLIP-L model"
+                      sx={commonInputStyles}
                     />
-                    <Button
-                      variant="outlined"
-                      onClick={() => handleFileSelect('clipLPath', 'safetensors,ckpt')}
-                      startIcon={<FolderOpenIcon />}
-                    >
-                      Browse
-                    </Button>
+                    <IconButton onClick={() => handleFileSelect('clipLPath', 'safetensors,bin')}>
+                      <FolderOpenIcon />
+                    </IconButton>
                   </Box>
                 </Grid>
-
                 <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                     <TextField
                       fullWidth
-                      label="T5XXL Model (Optional)"
-                      value={config.t5xxlPath}
+                      label="T5-XXL Path"
+                      value={config.t5xxlPath || ''}
                       onChange={(e) => setConfig(prev => ({ ...prev, t5xxlPath: e.target.value }))}
-                      placeholder="T5XXL model path"
+                      placeholder="Path to T5-XXL model"
+                      sx={commonInputStyles}
                     />
-                    <Button
-                      variant="outlined"
-                      onClick={() => handleFileSelect('t5xxlPath', 'safetensors,ckpt')}
-                      startIcon={<FolderOpenIcon />}
-                    >
-                      Browse
-                    </Button>
+                    <IconButton onClick={() => handleFileSelect('t5xxlPath', 'safetensors,bin')}>
+                      <FolderOpenIcon />
+                    </IconButton>
                   </Box>
                 </Grid>
               </>
             )}
 
-            {/* VAE/AE Field for both FLUX and SDXL */}
+            {/* VAE Path (Optional) */}
             <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <TextField
                   fullWidth
-                  label="VAE/AE Model (Optional)"
-                  value={config.vaePath}
+                  label="VAE Path (Optional)"
+                  value={config.vaePath || ''}
                   onChange={(e) => setConfig(prev => ({ ...prev, vaePath: e.target.value }))}
-                  placeholder="VAE or AutoEncoder model path"
-                  helperText="Optional VAE or AutoEncoder model for improved image quality"
+                  placeholder="Path to VAE model (optional)"
+                  sx={commonInputStyles}
                 />
-                <Button
-                  variant="outlined"
-                  onClick={() => handleFileSelect('vaePath', 'safetensors,ckpt,pth')}
-                  startIcon={<FolderOpenIcon />}
-                >
-                  Browse
-                </Button>
+                <IconButton onClick={() => handleFileSelect('vaePath', 'safetensors,ckpt,pt')}>
+                  <FolderOpenIcon />
+                </IconButton>
               </Box>
             </Grid>
 
-            {/* Dataset Configuration */}
+            {/* Dataset Path */}
             <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Dataset Configuration
-              </Typography>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <TextField
                   fullWidth
                   label="Dataset Path"
                   value={config.datasetPath}
                   onChange={(e) => setConfig(prev => ({ ...prev, datasetPath: e.target.value }))}
-                  placeholder="Select folder containing training images"
-                  helperText={estimatedDatasetSize > 0 ? `Estimated ${estimatedDatasetSize} images` : ''}
+                  placeholder="Path to training dataset folder"
+                  error={validationResult?.errors.some(err => err.includes('dataset'))}
+                  sx={commonInputStyles}
                 />
-                <Button
-                  variant="contained"
-                  onClick={() => handleFolderSelect('datasetPath')}
-                  startIcon={<FolderOpenIcon />}
-                >
-                  Browse
-                </Button>
+                <IconButton onClick={() => handleFolderSelect('datasetPath')}>
+                  <FolderOpenIcon />
+                </IconButton>
               </Box>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Training Resolution</InputLabel>
-                <Select
-                  value={config.resolution}
-                  onChange={(e) => setConfig(prev => ({ ...prev, resolution: e.target.value }))}
-                  label="Training Resolution"
-                >
-                  <MenuItem value="512">512x512</MenuItem>
-                  <MenuItem value="768">768x768</MenuItem>
-                  <MenuItem value="1024">1024x1024</MenuItem>
-                  <MenuItem value="1024,1024">1024x1024 (FLUX Default)</MenuItem>
-                  <MenuItem value="512,768">512x768 (Portrait)</MenuItem>
-                  <MenuItem value="768,512">768x512 (Landscape)</MenuItem>
-                  <MenuItem value="1024,768">1024x768 (Wide)</MenuItem>
-                  <MenuItem value="768,1024">768x1024 (Tall)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Custom Resolution"
-                placeholder="e.g., 1024,1024 or 512"
-                helperText="Override preset resolution (width,height or single size)"
-                value={config.resolution}
-                onChange={(e) => setConfig(prev => ({ ...prev, resolution: e.target.value }))}
-              />
+              {estimatedDatasetSize > 0 && (
+                <Typography variant="caption" color="text.secondary">
+                  Estimated dataset size: {estimatedDatasetSize} images
+                </Typography>
+              )}
             </Grid>
 
             {/* Output Configuration */}
-            <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Output Configuration
-              </Typography>
-            </Grid>
-
             <Grid item xs={12} md={8}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <TextField
                   fullWidth
                   label="Output Directory"
                   value={config.outputDir}
                   onChange={(e) => setConfig(prev => ({ ...prev, outputDir: e.target.value }))}
-                  placeholder="Select output directory for LoRA model"
+                  placeholder="Path to save trained model"
+                  error={validationResult?.errors.some(err => err.includes('output'))}
+                  sx={commonInputStyles}
                 />
-                <Button
-                  variant="contained"
-                  onClick={() => handleFolderSelect('outputDir')}
-                  startIcon={<FolderOpenIcon />}
-                >
-                  Browse
-                </Button>
+                <IconButton onClick={() => handleFolderSelect('outputDir')}>
+                  <FolderOpenIcon />
+                </IconButton>
               </Box>
             </Grid>
-
             <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
-                label="Output Name"
+                label="Model Name"
                 value={config.outputName}
                 onChange={(e) => setConfig(prev => ({ ...prev, outputName: e.target.value }))}
                 placeholder="my_lora"
+                sx={commonInputStyles}
               />
             </Grid>
 
             {/* Training Parameters */}
             <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 1 }}>
                 Training Parameters
               </Typography>
+              <Divider />
             </Grid>
 
             <Grid item xs={12} md={3}>
@@ -598,10 +635,23 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                 label="Learning Rate"
                 value={config.learningRate}
                 onChange={(e) => setConfig(prev => ({ ...prev, learningRate: parseFloat(e.target.value) }))}
-                inputProps={{ step: 0.0001, min: 0.00001, max: 0.01 }}
+                inputProps={{ step: 0.0001, min: 0.0001, max: 0.01 }}
+                helperText="Typical: 1e-4 to 1e-5"
+                sx={commonInputStyles}
               />
             </Grid>
-
+            <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Batch Size"
+                value={config.batchSize}
+                onChange={(e) => setConfig(prev => ({ ...prev, batchSize: parseInt(e.target.value) }))}
+                inputProps={{ min: 1, max: 8 }}
+                helperText={gpuOptimizations ? `Recommended: ${gpuOptimizations.recommendedBatchSize}` : 'GPU-dependent'}
+                sx={commonInputStyles}
+              />
+            </Grid>
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
@@ -610,11 +660,32 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                 value={config.epochs}
                 onChange={(e) => setConfig(prev => ({ ...prev, epochs: parseInt(e.target.value) }))}
                 inputProps={{ min: 1, max: 1000 }}
-                helperText={calculateTotalSteps() > 0 ? `~${calculateTotalSteps()} steps` : ''}
+                helperText="Training iterations"
+                sx={commonInputStyles}
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Max Train Steps"
+                value={config.maxTrainSteps || ''}
+                onChange={(e) => setConfig(prev => ({ ...prev, maxTrainSteps: e.target.value ? parseInt(e.target.value) : undefined }))}
+                inputProps={{ min: 1 }}
+                helperText="Optional override"
+                sx={commonInputStyles}
               />
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            {/* Network Configuration */}
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 1 }}>
+                Network Configuration
+              </Typography>
+              <Divider />
+            </Grid>
+
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
                 type="number"
@@ -622,10 +693,11 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                 value={config.networkDim}
                 onChange={(e) => setConfig(prev => ({ ...prev, networkDim: parseInt(e.target.value) }))}
                 inputProps={{ min: 1, max: 1024 }}
+                helperText="LoRA rank (4-128)"
+                sx={commonInputStyles}
               />
             </Grid>
-
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
                 type="number"
@@ -633,37 +705,56 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                 value={config.networkAlpha}
                 onChange={(e) => setConfig(prev => ({ ...prev, networkAlpha: parseInt(e.target.value) }))}
                 inputProps={{ min: 1, max: 1024 }}
+                helperText="Usually same as dim"
+                sx={commonInputStyles}
               />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth sx={commonInputStyles}>
+                <InputLabel>Network Module</InputLabel>
+                <Select
+                  value={config.networkModule}
+                  label="Network Module"
+                  onChange={(e) => setConfig(prev => ({ ...prev, networkModule: e.target.value }))}
+                >
+                  <MenuItem value="networks.lora">LoRA</MenuItem>
+                  <MenuItem value="networks.dylora">DyLoRA</MenuItem>
+                  <MenuItem value="networks.lora_fa">LoRA-FA</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
 
             {/* Advanced Settings */}
             {showAdvanced && (
               <>
                 <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="h6" gutterBottom>
-                    Advanced Settings
-                  </Typography>
+                  <Paper 
+                    sx={{ 
+                      p: 2, 
+                      mt: 2, 
+                      border: '2px dashed',
+                      borderColor: 'primary.main',
+                      bgcolor: 'action.hover'
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <SettingsIcon color="primary" />
+                      Advanced Settings
+                      <Chip label="Expert Mode" size="small" color="primary" />
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      Fine-tune optimizer, scheduler, and memory settings for optimal performance
+                    </Typography>
+                  </Paper>
                 </Grid>
 
                 <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Batch Size"
-                    value={config.batchSize}
-                    onChange={(e) => setConfig(prev => ({ ...prev, batchSize: parseInt(e.target.value) }))}
-                    inputProps={{ min: 1, max: 32 }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <FormControl fullWidth>
+                  <FormControl fullWidth sx={commonInputStyles}>
                     <InputLabel>Mixed Precision</InputLabel>
                     <Select
                       value={config.mixedPrecision}
-                      onChange={(e) => setConfig(prev => ({ ...prev, mixedPrecision: e.target.value as any }))}
                       label="Mixed Precision"
+                      onChange={(e) => setConfig(prev => ({ ...prev, mixedPrecision: e.target.value as any }))}
                     >
                       <MenuItem value="no">No</MenuItem>
                       <MenuItem value="fp16">FP16</MenuItem>
@@ -671,39 +762,101 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                     </Select>
                   </FormControl>
                 </Grid>
-
                 <Grid item xs={12} md={4}>
-                  <FormControl fullWidth>
+                  <FormControl fullWidth sx={commonInputStyles}>
                     <InputLabel>Optimizer</InputLabel>
                     <Select
                       value={config.optimizer}
-                      onChange={(e) => setConfig(prev => ({ ...prev, optimizer: e.target.value }))}
                       label="Optimizer"
+                      onChange={(e) => setConfig(prev => ({ ...prev, optimizer: e.target.value }))}
                     >
-                      <MenuItem value="AdamW8bit">AdamW 8bit</MenuItem>
                       <MenuItem value="AdamW">AdamW</MenuItem>
-                      <MenuItem value="SGD">SGD</MenuItem>
+                      <MenuItem value="AdamW8bit">AdamW8bit</MenuItem>
                       <MenuItem value="Lion">Lion</MenuItem>
+                      <MenuItem value="SGDNesterov">SGD Nesterov</MenuItem>
                     </Select>
                   </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth sx={commonInputStyles}>
+                    <InputLabel>LR Scheduler</InputLabel>
+                    <Select
+                      value={config.lrScheduler}
+                      label="LR Scheduler"
+                      onChange={(e) => setConfig(prev => ({ ...prev, lrScheduler: e.target.value }))}
+                    >
+                      <MenuItem value="cosine">Cosine</MenuItem>
+                      <MenuItem value="cosine_with_restarts">Cosine with Restarts</MenuItem>
+                      <MenuItem value="linear">Linear</MenuItem>
+                      <MenuItem value="constant">Constant</MenuItem>
+                      <MenuItem value="polynomial">Polynomial</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="LR Warmup Steps"
+                    value={config.lrWarmupSteps}
+                    onChange={(e) => setConfig(prev => ({ ...prev, lrWarmupSteps: parseInt(e.target.value) }))}
+                    inputProps={{ min: 0 }}
+                    helperText="Learning rate warmup"
+                    sx={commonInputStyles}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Sample Every N Steps"
+                    value={config.sampleEveryNSteps}
+                    onChange={(e) => setConfig(prev => ({ ...prev, sampleEveryNSteps: parseInt(e.target.value) }))}
+                    inputProps={{ min: 1 }}
+                    helperText="Generate samples"
+                    sx={commonInputStyles}
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={config.gradientCheckpointing}
+                        onChange={(e) => setConfig(prev => ({ ...prev, gradientCheckpointing: e.target.checked }))}
+                      />
+                    }
+                    label="Gradient Checkpointing"
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={config.xformersMemoryEfficientAttention}
+                        onChange={(e) => setConfig(prev => ({ ...prev, xformersMemoryEfficientAttention: e.target.checked }))}
+                      />
+                    }
+                    label="xFormers Memory Efficient Attention"
+                  />
                 </Grid>
               </>
             )}
 
-            {/* Sample Generation */}
+            {/* Sample Prompts */}
             <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Sample Generation
+              <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 1 }}>
+                Sample Prompts
               </Typography>
+              <Divider />
             </Grid>
-
             <Grid item xs={12}>
               <PromptManager
                 value={config.samplePrompts}
                 onChange={(prompts) => setConfig(prev => ({ ...prev, samplePrompts: prompts }))}
-                label="Sample Generation Prompts"
-                helperText={`Samples will be generated every ${calculateSampleSteps()} steps`}
+                label="Sample Prompts"
+                helperText="Prompts used for validation during training"
               />
             </Grid>
 
@@ -718,7 +871,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                 >
                   Reset Form
                 </Button>
-
                 <Button
                   variant="outlined"
                   onClick={handleManualSave}
@@ -727,7 +879,6 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
                 >
                   Save Now
                 </Button>
-                
                 <Button
                   variant="contained"
                   size="large"
@@ -743,6 +894,88 @@ const SimpleTrainingForm: React.FC<SimpleTrainingFormProps> = ({
           </Grid>
         </CardContent>
       </Card>
+      {isTraining && (
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Training Progress
+            </Typography>
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Training Status: {isTraining ? 'Running' : 'Idle'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Epoch {currentEpoch} / {config.epochs}
+                </Typography>
+              </Box>
+              <Box sx={{ width: '100%', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: '100%', mr: 1 }}>
+                    <LinearProgress 
+                      variant="determinate" 
+                      value={config.epochs > 0 ? (currentEpoch / config.epochs) * 100 : 0}
+                      sx={{ height: 8, borderRadius: 5 }}
+                    />
+                  </Box>
+                  <Box sx={{ minWidth: 35 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {config.epochs > 0 ? Math.round((currentEpoch / config.epochs) * 100) : 0}%
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                <Button
+                  variant="contained"
+                  color="error"
+                  startIcon={<StopIcon />}
+                  onClick={() => window.api.python.cancelTraining(currentProcessId || 'current')}
+                  disabled={!isTraining}
+                >
+                  Stop Training
+                </Button>
+              </Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Recent Training Output:
+              </Typography>
+              <Paper
+                sx={{
+                  maxHeight: 300,
+                  overflow: 'auto',
+                  backgroundColor: 'background.default',
+                  p: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                }}
+              >
+                {trainingLogs.length > 0 ? (
+                  trainingLogs.slice(-20).map((log, index) => (
+                    <Typography 
+                      key={index}
+                      variant="body2" 
+                      sx={{ 
+                        fontFamily: 'monospace',
+                        fontSize: '0.8rem',
+                        mb: 0.5,
+                        whiteSpace: 'pre-wrap',
+                        color: log.includes('error') || log.includes('Error') ? 'error.main' : 'text.primary',
+                      }}
+                    >
+                      {log}
+                    </Typography>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Waiting for training output...
+                  </Typography>
+                )}
+              </Paper>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };

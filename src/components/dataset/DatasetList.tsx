@@ -4,6 +4,7 @@ import {
   Button,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
@@ -94,17 +95,15 @@ const DatasetList: React.FC<DatasetListProps> = ({ onDatasetSelect }) => {
       <Paper sx={{ maxHeight: 400, overflow: 'auto' }}>
         <List>
           {datasets.map((dataset) => (
-            <ListItem
-              key={dataset.id}
-              button
-              onClick={() => onDatasetSelect(dataset.id)}
-            >
-              <ListItemText
-                primary={dataset.metadata.name}
-                secondary={`${dataset.metadata.totalImages} images | Last modified: ${new Date(
-                  dataset.metadata.modified
-                ).toLocaleDateString()}`}
-              />
+            <ListItem key={dataset.id}>
+              <ListItemButton onClick={() => onDatasetSelect(dataset.id)}>
+                <ListItemText
+                  primary={dataset.metadata.name}
+                  secondary={`${dataset.metadata.totalImages} images | Last modified: ${new Date(
+                    dataset.metadata.modified
+                  ).toLocaleDateString()}`}
+                />
+              </ListItemButton>
               <ListItemSecondaryAction>
                 <IconButton
                   edge="end"

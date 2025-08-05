@@ -37,19 +37,13 @@ import {
   IconButton,
 } from '@mui/material';
 import {
-  Save as SaveIcon,
-  RestoreFromTrash as ResetIcon,
   Memory as MemoryIcon,
-  Speed as SpeedIcon,
   ImportExport as ImportExportIcon,
   Settings as SettingsIcon,
-  Palette as PaletteIcon,
-  Folder as FolderIcon,
-  History as HistoryIcon,
-  Delete as DeleteIcon,
+  RestoreFromTrash as ResetIcon,
 } from '@mui/icons-material';
 import FileSelector from '../common/FileSelector';
-import { useConfiguration, useTrainingConfig, useUIConfig, usePathsConfig, useBehaviorConfig, useRecentItems } from '../../contexts/ConfigurationContext';
+import { useConfiguration, useTrainingConfig, useBehaviorConfig } from '../../contexts/ConfigurationContext';
 import { VRAM_PRESETS } from '../../types/settings';
 
 interface TabPanelProps {
@@ -76,10 +70,7 @@ function TabPanel(props: TabPanelProps) {
 const EnhancedSettingsManager: React.FC = () => {
   const { config, resetConfig, exportConfig, importConfig } = useConfiguration();
   const { training, updateTraining } = useTrainingConfig();
-  const { ui, updateUI } = useUIConfig();
-  const { paths, updatePaths } = usePathsConfig();
   const { behavior, updateBehavior } = useBehaviorConfig();
-  const { getRecentItems } = useRecentItems();
   
   const [tabValue, setTabValue] = useState(0);
   const [snackbar, setSnackbar] = useState({ 
@@ -261,170 +252,7 @@ const EnhancedSettingsManager: React.FC = () => {
     </Grid>
   );
 
-  // UI Settings Tab
-  const renderUISettings = () => (
-    <Grid container spacing={3}>
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <PaletteIcon />
-              Appearance
-            </Typography>
-            
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Theme</InputLabel>
-              <Select
-                value={ui.theme}
-                onChange={(e) => updateUI({ theme: e.target.value as any })}
-                label="Theme"
-              >
-                <MenuItem value="light">Light</MenuItem>
-                <MenuItem value="dark">Dark</MenuItem>
-                <MenuItem value="auto">Auto (System)</MenuItem>
-              </Select>
-            </FormControl>
 
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Language</InputLabel>
-              <Select
-                value={ui.language}
-                onChange={(e) => updateUI({ language: e.target.value })}
-                label="Language"
-              >
-                <MenuItem value="en">English</MenuItem>
-                <MenuItem value="es">Español</MenuItem>
-                <MenuItem value="fr">Français</MenuItem>
-                <MenuItem value="de">Deutsch</MenuItem>
-              </Select>
-            </FormControl>
-          </CardContent>
-        </Card>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Interface Options
-            </Typography>
-            
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={ui.sidebarCollapsed}
-                  onChange={(e) => updateUI({ sidebarCollapsed: e.target.checked })}
-                />
-              }
-              label="Collapsed sidebar by default"
-            />
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={ui.showWelcomeScreen}
-                  onChange={(e) => updateUI({ showWelcomeScreen: e.target.checked })}
-                />
-              }
-              label="Show welcome screen on startup"
-            />
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  );
-
-  // Paths Settings Tab
-  const renderPathsSettings = () => (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <FolderIcon />
-          Essential Paths
-        </Typography>
-        
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <FileSelector
-              label="Default Output Directory"
-              value={paths.outputDirectory}
-              onChange={(value) => updatePaths({ outputDirectory: value })}
-              isDirectory={true}
-              helperText="Default directory for saving trained models"
-            />
-          </Grid>
-
-          <Grid item xs={12}>
-            <FileSelector
-              label="Python Executable (Optional)"
-              value={paths.pythonExecutable}
-              onChange={(value) => updatePaths({ pythonExecutable: value })}
-              filter="exe"
-              helperText="Path to Python executable (leave empty to use system Python)"
-            />
-          </Grid>
-
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="SD-Scripts Path"
-              value={paths.sdScriptsPath}
-              onChange={(e) => updatePaths({ sdScriptsPath: e.target.value })}
-              helperText="Path to sd-scripts directory (relative or absolute)"
-            />
-          </Grid>
-        </Grid>
-      </Grid>
-    </Grid>
-  );
-
-  // Recent Items Tab
-  const renderRecentItems = () => (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <HistoryIcon />
-          Recent Items
-        </Typography>
-        
-        <Grid container spacing={2}>
-          {(['models', 'datasets', 'outputs', 'projects'] as const).map((type) => (
-            <Grid item xs={12} md={6} key={type}>
-              <Card>
-                <CardContent>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Recent {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </Typography>
-                  
-                  <List dense>
-                    {getRecentItems(type).slice(0, 5).map((item, index) => (
-                      <ListItem key={index}>
-                        <ListItemIcon>
-                          <FolderIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={item.name}
-                          secondary={`${item.path} • ${new Date(item.lastUsed).toLocaleDateString()}`}
-                        />
-                      </ListItem>
-                    ))}
-                    {getRecentItems(type).length === 0 && (
-                      <ListItem>
-                        <ListItemText 
-                          primary="No recent items" 
-                          secondary="Items will appear here as you use them"
-                        />
-                      </ListItem>
-                    )}
-                  </List>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Grid>
-    </Grid>
-  );
 
   // Behavior Settings Tab
   const renderBehaviorSettings = () => (
@@ -461,45 +289,7 @@ const EnhancedSettingsManager: React.FC = () => {
         </Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Application Behavior
-            </Typography>
-            
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={behavior.checkForUpdates}
-                  onChange={(e) => updateBehavior({ checkForUpdates: e.target.checked })}
-                />
-              }
-              label="Check for updates"
-            />
-            
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={behavior.confirmBeforeExit}
-                  onChange={(e) => updateBehavior({ confirmBeforeExit: e.target.checked })}
-                />
-              }
-              label="Confirm before exit"
-            />
-            
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={behavior.rememberWindowState}
-                  onChange={(e) => updateBehavior({ rememberWindowState: e.target.checked })}
-                />
-              }
-              label="Remember window state"
-            />
-          </CardContent>
-        </Card>
-      </Grid>
+
     </Grid>
   );
 
@@ -544,9 +334,6 @@ const EnhancedSettingsManager: React.FC = () => {
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange} aria-label="settings tabs">
             <Tab label="Training" icon={<MemoryIcon />} />
-            <Tab label="Interface" icon={<PaletteIcon />} />
-            <Tab label="Paths" icon={<FolderIcon />} />
-            <Tab label="Recent" icon={<HistoryIcon />} />
             <Tab label="Behavior" icon={<SettingsIcon />} />
           </Tabs>
         </Box>
@@ -556,18 +343,6 @@ const EnhancedSettingsManager: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          {renderUISettings()}
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={2}>
-          {renderPathsSettings()}
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={3}>
-          {renderRecentItems()}
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={4}>
           {renderBehaviorSettings()}
         </TabPanel>
       </Card>

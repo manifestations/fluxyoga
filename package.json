@@ -48,9 +48,10 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^5.18.0",
-    "@mui/material": "^5.18.0",
-    "@mui/system": "^7.2.0",
+    "@mui/icons-material": "^6.2.0",
+    "@mui/lab": "^6.0.0-beta.15",
+    "@mui/material": "^6.2.0",
+    "@mui/system": "^6.2.0",
     "@types/node": "^24.1.0",
     "@types/uuid": "^10.0.0",
     "electron-store": "^8.1.0",
@@ -66,10 +67,10 @@
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
-    "electron": "^26.6.10",
+    "electron": "^37.2.5",
     "electron-builder": "^24.6.4",
     "typescript": "^5.9.2",
-    "vite": "^4.4.9",
+    "vite": "^7.0.6",
     "wait-on": "^8.0.4"
   }
 }

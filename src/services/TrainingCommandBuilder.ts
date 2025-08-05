@@ -46,7 +46,7 @@ export class TrainingCommandBuilder {
       ...(config.xformersMemoryEfficientAttention ? ['--xformers'] : []),
       
       // Sample generation
-      '--sample_prompts', config.samplePrompts.join('\n'),
+      '--sample_prompts', `${config.outputDir}/sample_prompts.txt`,
       '--sample_every_n_steps', config.sampleEveryNSteps.toString(),
       '--sample_sampler', 'euler_a',
       
@@ -109,7 +109,7 @@ export class TrainingCommandBuilder {
       ...(config.xformersMemoryEfficientAttention ? ['--xformers'] : []),
       
       // Sample generation
-      '--sample_prompts', config.samplePrompts.join('\n'),
+      '--sample_prompts', `${config.outputDir}/sample_prompts.txt`,
       '--sample_every_n_steps', config.sampleEveryNSteps.toString(),
       '--sample_sampler', 'euler_a',
       
@@ -223,20 +223,38 @@ export class TrainingCommandBuilder {
   }
 
   /**
+   * Create sample prompts file for training
+   */
+  async createSamplePromptsFile(config: LoRATrainingConfig): Promise<void> {
+    const promptsPath = `${config.outputDir}/sample_prompts.txt`;
+    const promptsContent = config.samplePrompts.join('\n');
+    
+    try {
+      // Ensure output directory exists
+      await window.api.fs.mkdir(config.outputDir);
+      // Write prompts file
+      await window.api.fs.writeFile(promptsPath, promptsContent);
+    } catch (error) {
+      console.error('Failed to create sample prompts file:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Generate default sample prompts based on model type
    */
   getDefaultSamplePrompts(modelType: 'flux' | 'sdxl'): string[] {
     if (modelType === 'flux') {
       return [
-        'a beautiful landscape with mountains and lakes',
-        'a portrait of a person, professional photography',
-        'highly detailed digital art, trending on artstation',
+        'a beautiful woman model in a casual outfit, standing pose, professional photography',
+        'a woman model in an elegant dress, sitting gracefully, studio lighting',
+        'a woman model in sportswear, dynamic pose, high quality portrait',
       ];
     } else {
       return [
-        'a beautiful landscape with mountains and lakes', 
-        'a portrait of a person, professional photography',
-        'masterpiece, best quality, ultra detailed',
+        'a beautiful woman model in a casual outfit, standing pose, professional photography', 
+        'a woman model in an elegant dress, sitting gracefully, studio lighting',
+        'a woman model in sportswear, dynamic pose, masterpiece quality',
       ];
     }
   }

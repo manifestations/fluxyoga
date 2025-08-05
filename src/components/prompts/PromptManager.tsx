@@ -15,6 +15,7 @@ import {
   DialogTitle,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemSecondaryAction,
   Chip,
@@ -337,15 +338,13 @@ const PromptManager: React.FC<PromptManagerProps> = ({
                 </Typography>
                 <List>
                   {savedPromptSets.map((promptSet) => (
-                    <ListItem
-                      key={promptSet.id}
-                      button
-                      onClick={() => handleLoadPromptSet(promptSet)}
-                    >
-                      <ListItemText
-                        primary={promptSet.name}
-                        secondary={`${promptSet.prompts.length} prompts - ${new Date(promptSet.createdAt).toLocaleDateString()}`}
-                      />
+                    <ListItem key={promptSet.id}>
+                      <ListItemButton onClick={() => handleLoadPromptSet(promptSet)}>
+                        <ListItemText
+                          primary={promptSet.name}
+                          secondary={`${promptSet.prompts.length} prompts - ${new Date(promptSet.createdAt).toLocaleDateString()}`}
+                        />
+                      </ListItemButton>
                       <ListItemSecondaryAction>
                         <IconButton
                           edge="end"
